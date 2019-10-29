@@ -29,6 +29,7 @@ from pymaker.keys import register_keys
 from pymaker.lifecycle import Lifecycle
 from pymaker.numeric import Wad
 from pymaker.token import ERC20Token
+from pymaker.deployment import DssDeployment
 
 class CageKeeper:
     """Keeper to facilitate Emergency Shutdown"""
@@ -55,8 +56,11 @@ class CageKeeper:
         parser.add_argument("--eth-key", type=str, nargs='*', required=True,
                             help="Ethereum private key(s) to use (e.g. 'key_file=/path/to/keystore.json,pass_file=/path/to/passphrase.txt')")
 
-        parser.add_argument("--dss_deployment_file", type=str, required=True,
+        parser.add_argument("--dss-deployment-file", type=str, required=True,
                             help="Json description of all the system addresses (e.g. /Full/Path/To/configFile.json)")
+
+        parser.add_argument("--vat-deployment-block", type=int, required=False, default=0,
+                            help=" Block that the Vat from dss-deployment-file was deployed at (e.g. 8836668")
 
         parser.add_argument("--max-errors", type=int, default=100,
                             help="Maximum number of allowed errors before the keeper terminates (default: 100)")
@@ -72,7 +76,8 @@ class CageKeeper:
         register_keys(self.web3, self.arguments.eth_key)
         self.our_address = Address(self.arguments.eth_from)
 
-        mcd = DssDeployment.from_json(web3=web3, conf=open(self.arguments.dss_deployment_file, "r").read())
+        self.mcd = DssDeployment.from_json(web3=self.web3, conf=open(self.arguments.dss_deployment_file, "r").read())
+        self.deployment_block = self.arguments.vat_deployment_block
 
         self.max_errors = self.arguments.max_errors
         self.errors = 0
@@ -93,7 +98,19 @@ class CageKeeper:
 
         with Lifecycle(self.web3) as lifecycle:
             self.lifecycle = lifecycle
+            lifecycle.on_startup(self.checkDeployment)
             lifecycle.on_block(self.process_block)
+
+
+    def checkDeployment(self):
+        self.logger.info('')
+        self.logger.info('Please confirm the deployment details')
+        self.logger.info(f'Vat: {self.mcd.vat.address}')
+        self.logger.info(f'Vow: {self.mcd.vow.address}')
+        self.logger.info(f'Flapper: {self.mcd.flapper.address}')
+        self.logger.info(f'Flopper: {self.mcd.flopper.address}')
+        self.logger.info('')
+
 
 
 
