@@ -127,16 +127,18 @@ class CageKeeper:
 
 
     def check_cage(self):
-        self.logger.info('Checking Cage')
+        self.logger.info(f'Checking Cage on block {self.web3.eth.blockNumber}')
 
+        self.facilitate_cage()
         #if cage has been called in End.sol:
-            #facilitate_cage()
-
+            #self.facilitate_cage()
 
 
 
     def facilitate_cage(self):
         self.logger.info('Facilitating Cage')
+
+        ilks = self.get_ilks()
 
         # Ilks = get_ilks( )
         # drip_ilks(Ilks)
@@ -150,8 +152,15 @@ class CageKeeper:
         # skim_urns(ilks, underwater_urns)
 
 
+    def get_ilks(self):
+        current_blockNumber = self.web3.eth.blockNumber
+        blocks = current_blockNumber - self.deployment_block
 
+        frobs = self.mcd.vat.past_frob(blocks)
 
+        ilks = list(dict.fromkeys([i.ilk for i in frobs]))
+
+        return ilks
 
 
 
