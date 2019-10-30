@@ -76,7 +76,7 @@ class CageKeeper:
         register_keys(self.web3, self.arguments.eth_key)
         self.our_address = Address(self.arguments.eth_from)
 
-        self.mcd = DssDeployment.from_json(web3=self.web3, conf=open(self.arguments.dss_deployment_file, "r").read())
+        self.dss = DssDeployment.from_json(web3=self.web3, conf=open(self.arguments.dss_deployment_file, "r").read())
         self.deployment_block = self.arguments.vat_deployment_block
 
         self.max_errors = self.arguments.max_errors
@@ -105,10 +105,12 @@ class CageKeeper:
     def checkDeployment(self):
         self.logger.info('')
         self.logger.info('Please confirm the deployment details')
-        self.logger.info(f'Vat: {self.mcd.vat.address}')
-        self.logger.info(f'Vow: {self.mcd.vow.address}')
-        self.logger.info(f'Flapper: {self.mcd.flapper.address}')
-        self.logger.info(f'Flopper: {self.mcd.flopper.address}')
+        self.logger.info(f'Keeper Balance: {self.web3.eth.getBalance(self.our_address.address) / (10**18)} ETH')
+        self.logger.info(f'Vat: {self.dss.vat.address}')
+        self.logger.info(f'Vow: {self.dss.vow.address}')
+        self.logger.info(f'Flapper: {self.dss.flapper.address}')
+        self.logger.info(f'Flopper: {self.dss.flopper.address}')
+        self.logger.info(f'Jug: {self.dss.jug.address}')
         self.logger.info('')
 
 
@@ -140,6 +142,14 @@ class CageKeeper:
 
         ilks = self.get_ilks()
 
+        for ilk in ilks:
+            self.dss.jug.drip(ilk).transact(gas_price=self.gas_price())
+
+        self.logger.info('Done Dripping')
+
+
+
+
         # Ilks = get_ilks( )
         # drip_ilks(Ilks)
         # flopIds = get_flopIds( )
@@ -156,20 +166,19 @@ class CageKeeper:
         current_blockNumber = self.web3.eth.blockNumber
         blocks = current_blockNumber - self.deployment_block
 
-        frobs = self.mcd.vat.past_frob(blocks)
-
-        ilks = list(dict.fromkeys([i.ilk for i in frobs]))
+        frobs = self.dss.vat.past_frob(blocks)
+        ilkNames = list(dict.fromkeys([i.ilk for i in frobs]))
+        ilks = [self.dss.vat.ilk(i) for i in ilkNames]
 
         return ilks
 
 
 
+
+
     def gas_price(self):
-        """ FixedGasPrice if gas_price argument present, otherwise node DefaultGasPrice """
-        if self.arguments.gas_price > 0:
-            return FixedGasPrice(self.arguments.gas_price)
-        else:
-            return DefaultGasPrice()
+        """  DefaultGasPrice """
+        return DefaultGasPrice()
 
 
 if __name__ == '__main__':
