@@ -140,16 +140,7 @@ class CageKeeper:
     def facilitate_cage(self):
         self.logger.info('Facilitating Cage')
 
-        ilks = self.get_ilks()
-
-        for ilk in ilks:
-            self.dss.jug.drip(ilk).transact(gas_price=self.gas_price())
-
-        self.logger.info('Done Dripping')
-
-
-
-
+        # Tentative Structure
         # Ilks = get_ilks( )
         # drip_ilks(Ilks)
         # flopIds = get_flopIds( )
@@ -160,6 +151,25 @@ class CageKeeper:
         # skip_flip_auctions(Ilks, flipIds)
         # Underwater_urns = get_underwater_urns(ilks)
         # skim_urns(ilks, underwater_urns)
+
+        ilks = self.get_ilks()
+
+        for ilk in ilks:
+            self.dss.jug.drip(ilk).transact(gas_price=self.gas_price())
+
+        self.logger.info('Done Dripping')
+
+        flopIds = self.dss.flopper.active_auctions()
+        flapIds = self.dss.flapper.active_auctions()
+
+
+
+        # collateral = Collateral(ilk=ilk, gem=gem,
+        #                                 adapter=GemJoin(web3, Address(conf[f'MCD_JOIN_{name[0]}'])),
+        #                                 flipper=Flipper(web3, Address(conf[f'MCD_FLIP_{name[0]}'])),
+        #                                 pip=DSValue(web3, Address(conf[f'PIP_{name[1]}'])))
+
+
 
 
     def get_ilks(self):
