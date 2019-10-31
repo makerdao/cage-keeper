@@ -131,9 +131,6 @@ class CageKeeper:
 
 
 
-
-
-
     def process_block(self):
         """Callback called on each new block. If too many errors, terminate the keeper to minimize potential damage."""
         if self.errors >= self.max_errors:
@@ -156,46 +153,55 @@ class CageKeeper:
     def facilitate_cage(self):
         self.logger.info('Facilitating Cage')
 
-        # Tentative Structure
-        # Ilks = get_ilks( )
-        # drip_ilks(Ilks)
-        # flopIds = get_flopIds( )
-        # flapIds = get_flapIds( )
-        # flipIds = get_flipIds(ilk)
-        # yank_auctions(flopIds, flapIds)
-        # cage_ilks(ilks)
-        # skip_flip_auctions(Ilks, flipIds)
-        # Underwater_urns = get_underwater_urns(ilks)
-        # skim_urns(ilks, underwater_urns)
+        # Get End.wait in seconds (processing time)
+        wait = self.dss.end.wait()
 
+        # check ilks
         ilks = self.check_ilks(ilks)
 
-        # for ilk in ilks:
-        #     self.dss.jug.drip(ilk).transact(gas_price=self.gas_price())
+        # Drip all ilks
+        for ilk in ilks:
+            self.dss.jug.drip(ilk).transact(gas_price=self.gas_price())
 
-        self.logger.info('Done Dripping')
-
+        # Get all auctions that can be yanked after cage
         auctions = self.dss.cage_active_auctions()
 
         # TODO, see if bid ids can be exposed on Bid object in pymaker
+        # Yank all flap and flop auctions
         self.yank_auctions(auctions["flaps"], auctions["flops"])
 
-        # for ilk in ilks:
-        #     self.dss.end.cage(ilk).transact(gas_price=self.gas_price())
+        # Cage all ilks
+        for ilk in ilks:
+            self.dss.end.cage(ilk).transact(gas_price=self.gas_price())
 
+        # Skip all flip auctions
         for key in auctions["flips"].keys():
             ilk = self.dss.vat.ilk(key)
             for bid in auctions["flips"][key]:
                 self.dss.end.skip(ilk,bid.id).transact(gas_price=self.gas_price())
 
+        #get all underwater urns
+        urns = self.get_underwater_urns()
 
+        #skim all underwater urns
+        for i in urns:
+            self.dss.end.skim(i.ilk, i.address).transact(gas_price=self.gas_price())
 
+        # wait until processing time concludes
+        time.sleep(wait)
 
+        # Call thaw and Fix outstanding supply of Dai
+        self.dss.end.thaw().transact(gas_price=self.gas_price())
+
+        # Set fix (collateral/Dai ratio) for all Ilks
+        for ilk in ilks:
+            self.dss.end.flow(ilk).transact(gas_price=self.gas_price())
 
 
 
 
     def get_ilks(self):
+        """ From the block of Vat contract deployment, check which ilks have been frobbed  """
         current_blockNumber = self.web3.eth.blockNumber
         blocks = current_blockNumber - self.deployment_block
 
@@ -216,17 +222,29 @@ class CageKeeper:
         deploymentIlkNames = [i.name for i in deploymentIlks]
 
         if set(ilkNames) != set(deploymentIlkNames):
-            self.logger.info('======== ERROR - Discrepancy in frobbed ilks and collaterals in deployment file - ERROR ========')
+            self.logger.info('======== WARNING, Discrepancy in frobbed ilks and collaterals in deployment file ========')
             self.logger.info(f'Frobbed ilks: {ilkNames}')
             self.logger.info(f'Deployment ilks: {deploymentIlkNames}')
-            self.logger.info('===================================== Shutting Keeper Down =====================================')
-            self.lifecycle.terminate()
+            self.logger.info('=========================== Will continue with deployment ilks ==========================')
 
         return deploymentIlks
+
+
 
     def get_underwater_urns(self):
 
         urns = self.dss.vat.urns(from_block=self.deployment_block)
+
+        # Check if underwater, or  urn.art * ilk.rate > urn.ink * ilk.spot
+        underwater_urns = []
+
+        for ilk in urns.keys():
+            for urn in urns[ilk].keys():
+                if urns[ilk][urn].art * urns[ilk][urn].ilk.rate > urns[ilk][urn].ink * urns[ilk][urn].ilk.spot:
+                    underwater_urns.append(urns[ilk][urn])
+
+        return underwater_urns
+
 
 
 
