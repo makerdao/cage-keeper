@@ -1,6 +1,6 @@
 # This file is part of the Maker Keeper Framework.
 #
-# Copyright (C) _______
+# Copyright (C) 2018-2019 reverendus, kentonprescott
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -19,8 +19,10 @@ import argparse
 import logging
 import sys
 import time
+import types
 from os import path
 from typing import List
+
 
 from web3 import Web3, HTTPProvider
 
@@ -173,20 +175,19 @@ class CageKeeper:
 
         self.logger.info('Done Dripping')
 
-        #auctions is a dict with flips: {ilk.name: [Bids], .. } flaps: [Bids], flops: [Bids]
-        auctions = self.dss.active_auctions()
+        auctions = self.dss.cage_active_auctions()
 
         # TODO, see if bid ids can be exposed on Bid object in pymaker
-
-        # TODO: Yank some auctions
+        self.yank_auctions(auctions["flaps"], auctions["flops"])
 
         # for ilk in ilks:
         #     self.dss.end.cage(ilk).transact(gas_price=self.gas_price())
 
         for key in auctions["flips"].keys():
+            ilk = self.dss.vat.ilk(key)
             for bid in auctions["flips"][key]:
-                ilk = self.dss.vat.ilk(key)
                 self.dss.end.skip(ilk,bid.id).transact(gas_price=self.gas_price())
+
 
 
 
@@ -226,8 +227,62 @@ class CageKeeper:
     def get_underwater_urns(self):
 
         urns = self.dss.vat.urns(from_block=self.deployment_block)
-        
 
+
+
+    def cage_active_auctions(self) -> dict:
+    """ Aggregates active auctions that meet criteria to be called after Cage """
+
+        # Overwrites instance level methods!!
+        self.flapper.active_auctions = types.MethodType(self.active_auctions, self.flapper)
+        self.flopper.active_auctions = types.MethodType(self.active_auctions, self.flopper)
+
+        flips = {}
+        for collateral in self.collaterals.values():
+            # Each collateral has it's own flip contract; add auctions from each.
+            collateral.flipper.active_auctions = types.MethodType(self.active_auctions, collateral.flipper)
+            flips[collateral.ilk.name] = collateral.flipper.active_auctions(collateral.flipper)
+
+        return {
+            "flips": flips,
+            "flaps": self.flapper.active_auctions(self.flapper),
+            "flops": self.flopper.active_auctions(self.flopper)
+        }
+
+
+    def active_auctions(self, obj) -> list:
+    """ Returns auctions that meet the requiremenets to be called by End.skip, Flap.yank, and Flop.yank """
+        active_auctions = []
+        auction_count = obj.kicks()+1
+
+        # flip auctions
+        if isinstance(obj, Flipper):
+            for index in range(1, auction_count):
+                bid = obj._bids(index)
+                if bid.guy != Address("0x0000000000000000000000000000000000000000"):
+                    if bid.bid < bid.tab:
+                        active_auctions.append(bid)
+                index += 1
+
+        # flap and flop auctions
+        else:
+            for index in range(1, auction_count):
+                bid = obj._bids(index)
+                if bid.guy != Address("0x0000000000000000000000000000000000000000"):
+                    active_auctions.append(bid)
+                index += 1
+
+
+        return active_auctions
+
+
+    def yank_auctions(self, flapBids: List, flopBids: List):
+    """ Calls Flap.yank and Flop.yank on all auctions ids that meet the cage criteria """
+        for bid in flapBids:
+            self.dss.flapper.yank(bid.id).transact(gas_price=self.gas_price())
+
+        for bid in flopBids:
+            self.dss.flopper.yank(bid.id).transact(gas_price=self.gas_price())
 
 
 
