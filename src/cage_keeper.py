@@ -20,6 +20,7 @@ import logging
 import sys
 import time
 from os import path
+from typing import List
 
 from web3 import Web3, HTTPProvider
 
@@ -31,6 +32,7 @@ from pymaker.lifecycle import Lifecycle
 from pymaker.numeric import Wad
 from pymaker.token import ERC20Token
 from pymaker.deployment import DssDeployment
+from pymaker.dss import Ilk
 
 class CageKeeper:
     """Keeper to facilitate Emergency Shutdown"""
@@ -88,7 +90,7 @@ class CageKeeper:
             self.dss = DssDeployment.from_json(web3=self.web3, conf=open(self.arguments.dss_deployment_file, "r").read())
         else:
             self.dss = DssDeployment.from_json(web3=self.web3, conf=open(pymaker_deployment_config, "r").read())
-            
+
         self.deployment_block = self.arguments.vat_deployment_block
 
         self.max_errors = self.arguments.max_errors
@@ -143,7 +145,7 @@ class CageKeeper:
     def check_cage(self):
         self.logger.info(f'Checking Cage on block {self.web3.eth.blockNumber}')
 
-        #self.facilitate_cage()
+        self.facilitate_cage()
         #if cage has been called in End.sol:
             #self.facilitate_cage()
 
@@ -165,22 +167,15 @@ class CageKeeper:
         # skim_urns(ilks, underwater_urns)
 
         ilks = self.get_ilks()
+        self.check_ilks(ilks)
 
-        for ilk in ilks:
-            self.dss.jug.drip(ilk).transact(gas_price=self.gas_price())
+        # for ilk in ilks:
+        #     self.dss.jug.drip(ilk).transact(gas_price=self.gas_price())
 
         self.logger.info('Done Dripping')
 
         flopIds = self.dss.flopper.active_auctions()
         flapIds = self.dss.flapper.active_auctions()
-
-
-
-
-        # collateral = Collateral(ilk=ilk, gem=gem,
-        #                                 adapter=GemJoin(web3, Address(conf[f'MCD_JOIN_{name[0]}'])),
-        #                                 flipper=Flipper(web3, Address(conf[f'MCD_FLIP_{name[0]}'])),
-        #                                 pip=DSValue(web3, Address(conf[f'PIP_{name[1]}'])))
 
 
 
@@ -196,6 +191,19 @@ class CageKeeper:
         return ilks
 
 
+
+    def check_ilks(self, ilks: List[Ilk]):
+        assert(isinstance(ilks, list))
+        ilkNames = [i.name for i in ilks]
+
+        deploymentIlkNames = [self.dss.collaterals[key].ilk.name for key in self.dss.collaterals.keys()]
+
+        if set(ilkNames) != set(deploymentIlkNames):
+            self.logger.info('======== ERROR - Discrepancy in frobbed ilks and collaterals in deployment file - ERROR ========')
+            self.logger.info(f'Frobbed ilks: {ilkNames}')
+            self.logger.info(f'Deployment ilks: {deploymentIlkNames}')
+            self.logger.info('===================================== Shutting Keeper Down =====================================')
+            self.lifecycle.terminate()
 
 
 
