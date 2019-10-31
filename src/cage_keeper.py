@@ -19,6 +19,7 @@ import argparse
 import logging
 import sys
 import time
+from os import path
 
 from web3 import Web3, HTTPProvider
 
@@ -50,13 +51,16 @@ class CageKeeper:
         parser.add_argument("--rpc-timeout", type=int, default=10,
                             help="JSON-RPC timeout (in seconds, default: 10)")
 
+        parser.add_argument("--network", type=str, default="kovan",
+                            help="Network that you're running the Keeper on (options, 'mainnet', 'kovan', 'testnet')")
+
         parser.add_argument("--eth-from", type=str, required=True,
                             help="Ethereum address from which to send transactions; checksummed (e.g. '0x12AebC')")
 
         parser.add_argument("--eth-key", type=str, nargs='*', required=True,
                             help="Ethereum private key(s) to use (e.g. 'key_file=/path/to/keystore.json,pass_file=/path/to/passphrase.txt')")
 
-        parser.add_argument("--dss-deployment-file", type=str, required=True,
+        parser.add_argument("--dss-deployment-file", type=str, required=False,
                             help="Json description of all the system addresses (e.g. /Full/Path/To/configFile.json)")
 
         parser.add_argument("--vat-deployment-block", type=int, required=False, default=0,
@@ -76,7 +80,15 @@ class CageKeeper:
         register_keys(self.web3, self.arguments.eth_key)
         self.our_address = Address(self.arguments.eth_from)
 
-        self.dss = DssDeployment.from_json(web3=self.web3, conf=open(self.arguments.dss_deployment_file, "r").read())
+        basepath = path.dirname(__file__)
+        filepath = path.abspath(path.join(basepath, "..", "lib", "pymaker", "config", self.arguments.network+"-addresses.json"))
+        pymaker_deployment_config = filepath
+
+        if self.arguments.dss_deployment_file:
+            self.dss = DssDeployment.from_json(web3=self.web3, conf=open(self.arguments.dss_deployment_file, "r").read())
+        else:
+            self.dss = DssDeployment.from_json(web3=self.web3, conf=open(pymaker_deployment_config, "r").read())
+            
         self.deployment_block = self.arguments.vat_deployment_block
 
         self.max_errors = self.arguments.max_errors
@@ -131,7 +143,7 @@ class CageKeeper:
     def check_cage(self):
         self.logger.info(f'Checking Cage on block {self.web3.eth.blockNumber}')
 
-        self.facilitate_cage()
+        #self.facilitate_cage()
         #if cage has been called in End.sol:
             #self.facilitate_cage()
 
@@ -161,6 +173,7 @@ class CageKeeper:
 
         flopIds = self.dss.flopper.active_auctions()
         flapIds = self.dss.flapper.active_auctions()
+
 
 
 
