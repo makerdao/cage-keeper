@@ -166,16 +166,30 @@ class CageKeeper:
         # Underwater_urns = get_underwater_urns(ilks)
         # skim_urns(ilks, underwater_urns)
 
-        ilks = self.get_ilks()
-        self.check_ilks(ilks)
+        ilks = self.check_ilks(ilks)
 
         # for ilk in ilks:
         #     self.dss.jug.drip(ilk).transact(gas_price=self.gas_price())
 
         self.logger.info('Done Dripping')
 
-        flopIds = self.dss.flopper.active_auctions()
-        flapIds = self.dss.flapper.active_auctions()
+        #auctions is a dict with flips: {ilk.name: [Bids], .. } flaps: [Bids], flops: [Bids]
+        auctions = self.dss.active_auctions()
+
+        # TODO, see if bid ids can be exposed on Bid object in pymaker
+
+        # TODO: Yank some auctions
+
+        # for ilk in ilks:
+        #     self.dss.end.cage(ilk).transact(gas_price=self.gas_price())
+
+        for key in auctions["flips"].keys():
+            for bid in auctions["flips"][key]:
+                ilk = self.dss.vat.ilk(key)
+                self.dss.end.skip(ilk,bid.id).transact(gas_price=self.gas_price())
+
+
+
 
 
 
@@ -192,11 +206,13 @@ class CageKeeper:
 
 
 
-    def check_ilks(self, ilks: List[Ilk]):
-        assert(isinstance(ilks, list))
+    def check_ilks(self):
+
+        ilks = self.get_ilks()
         ilkNames = [i.name for i in ilks]
 
-        deploymentIlkNames = [self.dss.collaterals[key].ilk.name for key in self.dss.collaterals.keys()]
+        deploymentIlks = [self.dss.collaterals.ilk for key in self.dss.collaterals.keys()]
+        deploymentIlkNames = [i.name for i in deploymentIlks]
 
         if set(ilkNames) != set(deploymentIlkNames):
             self.logger.info('======== ERROR - Discrepancy in frobbed ilks and collaterals in deployment file - ERROR ========')
@@ -204,6 +220,14 @@ class CageKeeper:
             self.logger.info(f'Deployment ilks: {deploymentIlkNames}')
             self.logger.info('===================================== Shutting Keeper Down =====================================')
             self.lifecycle.terminate()
+
+        return deploymentIlks
+
+    def get_underwater_urns(self):
+
+        urns = self.dss.vat.urns(from_block=self.deployment_block)
+        
+
 
 
 
