@@ -98,6 +98,8 @@ class CageKeeper:
         self.max_errors = self.arguments.max_errors
         self.errors = 0
 
+        self.cage_actions
+
 
         logging.basicConfig(format='%(asctime)-15s %(levelname)-8s %(message)s',
                             level=(logging.DEBUG if self.arguments.debug else logging.INFO))
@@ -144,9 +146,15 @@ class CageKeeper:
     def check_cage(self):
         self.logger.info(f'Checking Cage on block {self.web3.eth.blockNumber}')
 
-        self.facilitate_cage()
-        #if cage has been called in End.sol:
-            #self.facilitate_cage()
+        live = self.dss.end.live()
+        self.cage_actions
+
+        if not live and not self.cage_actions:
+            time.sleep(180) # 12 block confirmation
+
+            if not live:
+                self.cage_auctions = true # so that self.facilitate_cage() won't be called again
+                self.facilitate_cage()
 
 
 
