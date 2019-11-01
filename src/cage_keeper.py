@@ -198,6 +198,11 @@ class CageKeeper:
         # wait until processing time concludes
         time.sleep(wait)
 
+        # check if Dai is in Vow and annialate it with Heal()
+        dai = self.dss.vat.dai(self.dss.vat.vow.address)
+        if dai > 0:
+            self.dss.vow.heal(dai).transact(gas_price=self.gas_price())
+
         # Call thaw and Fix outstanding supply of Dai
         self.dss.end.thaw().transact(gas_price=self.gas_price())
 
