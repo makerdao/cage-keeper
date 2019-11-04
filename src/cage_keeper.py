@@ -98,7 +98,7 @@ class CageKeeper:
         self.max_errors = self.arguments.max_errors
         self.errors = 0
 
-        self.cage_actions
+        self.cage_actions = False
 
 
         logging.basicConfig(format='%(asctime)-15s %(levelname)-8s %(message)s',
@@ -147,13 +147,12 @@ class CageKeeper:
         self.logger.info(f'Checking Cage on block {self.web3.eth.blockNumber}')
 
         live = self.dss.end.live()
-        self.cage_actions
 
         if not live and not self.cage_actions:
             time.sleep(180) # 12 block confirmation
 
             if not live:
-                self.cage_auctions = true # so that self.facilitate_cage() won't be called again
+                self.cage_auctions = True # so that self.facilitate_cage() won't be called again
                 self.facilitate_cage()
 
 
@@ -262,7 +261,7 @@ class CageKeeper:
 
 
     def cage_active_auctions(self) -> dict:
-    """ Aggregates active auctions that meet criteria to be called after Cage """
+        """ Aggregates active auctions that meet criteria to be called after Cage """
 
         # Overwrites instance level methods!!
         self.flapper.active_auctions = types.MethodType(self.active_auctions, self.flapper)
@@ -282,7 +281,7 @@ class CageKeeper:
 
 
     def active_auctions(self, obj) -> list:
-    """ Returns auctions that meet the requiremenets to be called by End.skip, Flap.yank, and Flop.yank """
+        """ Returns auctions that meet the requiremenets to be called by End.skip, Flap.yank, and Flop.yank """
         active_auctions = []
         auction_count = obj.kicks()+1
 
@@ -308,7 +307,7 @@ class CageKeeper:
 
 
     def yank_auctions(self, flapBids: List, flopBids: List):
-    """ Calls Flap.yank and Flop.yank on all auctions ids that meet the cage criteria """
+        """ Calls Flap.yank and Flop.yank on all auctions ids that meet the cage criteria """
         for bid in flapBids:
             self.dss.flapper.yank(bid.id).transact(gas_price=self.gas_price())
 

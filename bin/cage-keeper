@@ -1,8 +1,8 @@
 #!/bin/sh
 dir="$(dirname "$0")"/..
 
-PYTHONPATH=$PYTHONPATH:$dir:$dir/lib/pymaker
+source $dir/_virtualenv/bin/activate || exit
 
-export PYTHONPATH
+export PYTHONPATH=$PYTHONPATH:$dir:$dir/lib/pymaker
 
 exec python3 -m src.cage_keeper $@
