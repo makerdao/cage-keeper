@@ -25,6 +25,7 @@ from pymaker import Address
 from pymaker.auctions import Flipper, Flapper, Flopper
 from pymaker.deployment import Deployment, DssDeployment
 from pymaker.dss import Vat, Vow, Cat, Jug, Pot
+from pymaker.shutdown import ShutdownModule, End
 from pymaker.keys import register_keys
 
 
@@ -69,6 +70,10 @@ def our_address(web3) -> Address:
 def other_address(web3) -> Address:
     return Address(web3.eth.accounts[1])
 
+@pytest.fixture(scope="session")
+def keeper_address(web3) -> Address:
+    return Address(web3.eth.accounts[2])
+
 
 @pytest.fixture(scope="session")
 def deployment_address(web3) -> Address:
@@ -76,15 +81,24 @@ def deployment_address(web3) -> Address:
     return Address("0x00a329c0648769A73afAc7F9381E08FB43dBEA72")
 
 
+# @pytest.fixture(scope="session")
+# def mcd(web3) -> DssDeployment:
+#     # for local dockerized parity testchain
+#     basepath = path.dirname(__file__)
+#     filepath = path.abspath(path.join(basepath, "..", "lib", "pymaker", "config", "testnet-addresses.json"))
+#     pymaker_deployment_config = filepath
+#
+#     deployment = DssDeployment.from_json(web3=web3, conf=open(pymaker_deployment_config, "r").read())
+#     validate_contracts_loaded(deployment)
+#     return deployment
+
+
 @pytest.fixture(scope="session")
 def mcd(web3) -> DssDeployment:
-    # for local dockerized parity testchain
-    basepath = path.dirname(__file__)
-    filepath = path.abspath(path.join(basepath, "..", "lib", "pymaker", "config", "testnet-addresses.json"))
-    pymaker_deployment_config = filepath
 
-    deployment = DssDeployment.from_json(web3=web3, conf=open(pymaker_deployment_config, "r").read())
+    deployment = DssDeployment.from_network(web3=web3, network="testnet")
     validate_contracts_loaded(deployment)
+
     return deployment
 
 
@@ -103,3 +117,7 @@ def validate_contracts_loaded(deployment: DssDeployment):
     assert deployment.flopper.address is not None
     assert isinstance(deployment.pot, Pot)
     assert deployment.pot.address is not None
+    assert isinstance(deployment.end, End)
+    assert deployment.end.address is not None
+    assert isinstance(deployment.esm, ShutdownModule)
+    assert deployment.esm.address is not None

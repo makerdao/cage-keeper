@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2019 EdNoepel
+# Copyright (C) 2019 EdNoepel, kentonprescott
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -17,7 +17,13 @@
 
 
 import pytest
+
 from datetime import datetime, timedelta
+import time
+
+from web3 import Web3
+
+from src.cage_keeper import CageKeeper
 
 from pymaker import Address
 from pymaker.approval import directly, hope_directly
@@ -63,13 +69,27 @@ def create_flap_auction(mcd: DssDeployment, deployment_address: Address, our_add
     assert flapper.tend(flapper.kicks(), mcd.vow.bump(), bid).transact(from_address=our_address)
 
 
+def time_travel_by(web3: Web3, seconds: int):
+    assert(isinstance(web3, Web3))
+    assert(isinstance(seconds, int))
+
+    if "parity" in web3.version.node.lower():
+        print(f"time travel unsupported by parity; waiting {seconds} seconds")
+        time.sleep(seconds)
+        # force a block mining to have a correct timestamp in latest block
+        web3.eth.sendTransaction({'from': web3.eth.accounts[0], 'to': web3.eth.accounts[1], 'value': 1})
+    else:
+        web3.manager.request_blocking("evm_increaseTime", [seconds])
+        # force a block mining to have a correct timestamp in latest block
+        web3.manager.request_blocking("evm_mine", [])
+
+
 nobody = Address("0x0000000000000000000000000000000000000000")
 
 
-class TestShutdownModule:
-    """This test must be run after other MCD tests because it will leave the testchain `cage`d."""
+class TestCageKeeper:
 
-    def test_init(self, mcd, deployment_address, our_address):
+    def test_cage_keeper(self, mcd, deployment_address, our_address, keeper_address):
         assert mcd.esm is not None
         assert isinstance(mcd.esm, ShutdownModule)
         assert isinstance(mcd.esm.address, Address)
@@ -79,10 +99,48 @@ class TestShutdownModule:
 
         joy = mcd.vat.dai(mcd.vow.address)
         awe = mcd.vat.sin(mcd.vow.address)
-        # If `test_shutdown.py` is run in isolation, create a flap auction to exercise `yank`
+
         if joy == Rad(0) and awe == Rad(0):
             create_flap_auction(mcd, deployment_address, our_address)
 
+        assert mcd.mkr.approve(mcd.esm.address).transact()                # Approve esm to pull MKR from our address
+
+        # This should have no effect yet succeed regardless
+        assert mcd.esm.join(Wad(0)).transact()
+        assert mcd.esm.sum() == Wad(0)
+        assert mcd.esm.sum_of(our_address) == Wad(0)
+
+        mint_mkr(mcd.mkr, our_address, mcd.esm.min())                 # Mint min amount of MKR to our_address
+        assert mcd.esm.join(mcd.esm.min()).transact()                     # Join min amount of MKR to call esm.fire()
+        assert mcd.esm.sum() == mcd.esm.min()                             # ensure minimum is reached to call esm.fire()
+
+        open_cdp(mcd, mcd.collaterals['ETH-A'], our_address)
+
+        keeper = CageKeeper(args=((f"--eth-from {keeper_address} --network testnet").split()), web3=mcd.web3)
+        assert isinstance(keeper, CageKeeper)
+
+        keeper.check_cage()
+
+        assert mcd.end.live()
+        assert mcd.esm.fire().transact()
+        assert mcd.esm.fired()
+        assert not mcd.end.live()
+
+        keeper.check_cage()
+
+
+        # Check if cage(ilk) called on all ilks
+        deploymentIlks = [mcd.collaterals[key].ilk for key in mcd.collaterals.keys()]
+
+        for ilk in deploymentIlks:
+            assert mcd.end.tag(ilk) > Ray(0)
+
+
+
+
+
+
+    @pytest.mark.skip(reason="unable to determine redemption price")
     def test_join(self, mcd, our_address):
         assert mcd.mkr.approve(mcd.esm.address).transact()
 
@@ -102,6 +160,7 @@ class TestShutdownModule:
         assert mcd.esm.sum() == mcd.esm.min() + Wad(153)
         assert mcd.esm.sum_of(our_address) == mcd.esm.sum()
 
+    @pytest.mark.skip(reason="unable to determine redemption price")
     def test_fire(self, mcd, our_address):
         open_cdp(mcd, mcd.collaterals['ETH-A'], our_address)
 
@@ -110,7 +169,7 @@ class TestShutdownModule:
         assert mcd.esm.fired()
         assert not mcd.end.live()
 
-
+@pytest.mark.skip(reason="unable to determine redemption price")
 class TestEnd:
     """This test must be run after TestShutdownModule, which calls `esm.fire`."""
 

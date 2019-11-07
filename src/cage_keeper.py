@@ -29,9 +29,10 @@ from web3 import Web3, HTTPProvider
 
 from pymaker import Address
 from pymaker.gas import DefaultGasPrice, FixedGasPrice
+from pymaker.auctions import Flipper, Flapper, Flopper
 from pymaker.keys import register_keys
 from pymaker.lifecycle import Lifecycle
-from pymaker.numeric import Wad
+from pymaker.numeric import Wad, Rad
 from pymaker.token import ERC20Token
 from pymaker.deployment import DssDeployment
 from pymaker.dss import Ilk
@@ -39,9 +40,9 @@ from pymaker.dss import Ilk
 class CageKeeper:
     """Keeper to facilitate Emergency Shutdown"""
 
-    logger = logging.getLogger('simple-arbitrage-keeper')
+    logger = logging.getLogger('cage-keeper')
 
-    def __init__(self, args, **kwargs):
+    def __init__(self, args: list, **kwargs):
         """Pass in arguements assign necessary variables/objects and instantiate other Classes"""
 
         parser = argparse.ArgumentParser("simple-arbitrage-keeper")
@@ -55,13 +56,13 @@ class CageKeeper:
         parser.add_argument("--rpc-timeout", type=int, default=10,
                             help="JSON-RPC timeout (in seconds, default: 10)")
 
-        parser.add_argument("--network", type=str, default="kovan",
+        parser.add_argument("--network", type=str, required=True,
                             help="Network that you're running the Keeper on (options, 'mainnet', 'kovan', 'testnet')")
 
         parser.add_argument("--eth-from", type=str, required=True,
                             help="Ethereum address from which to send transactions; checksummed (e.g. '0x12AebC')")
 
-        parser.add_argument("--eth-key", type=str, nargs='*', required=True,
+        parser.add_argument("--eth-key", type=str, nargs='*',
                             help="Ethereum private key(s) to use (e.g. 'key_file=/path/to/keystore.json,pass_file=/path/to/passphrase.txt')")
 
         parser.add_argument("--dss-deployment-file", type=str, required=False,
@@ -91,7 +92,7 @@ class CageKeeper:
         if self.arguments.dss_deployment_file:
             self.dss = DssDeployment.from_json(web3=self.web3, conf=open(self.arguments.dss_deployment_file, "r").read())
         else:
-            self.dss = DssDeployment.from_json(web3=self.web3, conf=open(pymaker_deployment_config, "r").read())
+            self.dss = DssDeployment.from_network(web3=self.web3, network=self.arguments.network)
 
         self.deployment_block = self.arguments.vat_deployment_block
 
@@ -149,7 +150,8 @@ class CageKeeper:
         live = self.dss.end.live()
 
         if not live and not self.cage_actions:
-            time.sleep(180) # 12 block confirmation
+            # time.sleep(180) # 12 block confirmation
+            time.sleep(1) # TODO: Remove after testing on testnet
 
             if not live:
                 self.cage_auctions = True # so that self.facilitate_cage() won't be called again
@@ -164,14 +166,14 @@ class CageKeeper:
         wait = self.dss.end.wait()
 
         # check ilks
-        ilks = self.check_ilks(ilks)
+        ilks = self.check_ilks()
 
         # Drip all ilks
         for ilk in ilks:
             self.dss.jug.drip(ilk).transact(gas_price=self.gas_price())
 
         # Get all auctions that can be yanked after cage
-        auctions = self.dss.cage_active_auctions()
+        auctions = self.all_active_auctions()
 
         # TODO, see if bid ids can be exposed on Bid object in pymaker
         # Yank all flap and flop auctions
@@ -195,11 +197,12 @@ class CageKeeper:
             self.dss.end.skim(i.ilk, i.address).transact(gas_price=self.gas_price())
 
         # wait until processing time concludes
+        print(wait)
         time.sleep(wait)
 
         # check if Dai is in Vow and annialate it with Heal()
-        dai = self.dss.vat.dai(self.dss.vat.vow.address)
-        if dai > 0:
+        dai = self.dss.vat.dai(self.dss.vow.address)
+        if dai > Rad(0):
             self.dss.vow.heal(dai).transact(gas_price=self.gas_price())
 
         # Call thaw and Fix outstanding supply of Dai
@@ -217,7 +220,7 @@ class CageKeeper:
         current_blockNumber = self.web3.eth.blockNumber
         blocks = current_blockNumber - self.deployment_block
 
-        frobs = self.dss.vat.past_frob(blocks)
+        frobs = self.dss.vat.past_frobs(blocks)
         ilkNames = list(dict.fromkeys([i.ilk for i in frobs]))
         ilks = [self.dss.vat.ilk(i) for i in ilkNames]
 
@@ -230,7 +233,7 @@ class CageKeeper:
         ilks = self.get_ilks()
         ilkNames = [i.name for i in ilks]
 
-        deploymentIlks = [self.dss.collaterals.ilk for key in self.dss.collaterals.keys()]
+        deploymentIlks = [self.dss.collaterals[key].ilk for key in self.dss.collaterals.keys()]
         deploymentIlkNames = [i.name for i in deploymentIlks]
 
         if set(ilkNames) != set(deploymentIlkNames):
@@ -252,6 +255,7 @@ class CageKeeper:
 
         for ilk in urns.keys():
             for urn in urns[ilk].keys():
+                urns[ilk][urn].ilk = self.dss.vat.ilk(urns[ilk][urn].ilk.name)
                 if urns[ilk][urn].art * urns[ilk][urn].ilk.rate > urns[ilk][urn].ink * urns[ilk][urn].ilk.spot:
                     underwater_urns.append(urns[ilk][urn])
 
@@ -260,35 +264,30 @@ class CageKeeper:
 
 
 
-    def cage_active_auctions(self) -> dict:
+    def all_active_auctions(self) -> dict:
         """ Aggregates active auctions that meet criteria to be called after Cage """
 
-        # Overwrites instance level methods!!
-        self.flapper.active_auctions = types.MethodType(self.active_auctions, self.flapper)
-        self.flopper.active_auctions = types.MethodType(self.active_auctions, self.flopper)
-
         flips = {}
-        for collateral in self.collaterals.values():
+        for collateral in self.dss.collaterals.values():
             # Each collateral has it's own flip contract; add auctions from each.
-            collateral.flipper.active_auctions = types.MethodType(self.active_auctions, collateral.flipper)
-            flips[collateral.ilk.name] = collateral.flipper.active_auctions(collateral.flipper)
+            flips[collateral.ilk.name] = self.cage_active_auctions(collateral.flipper)
 
         return {
             "flips": flips,
-            "flaps": self.flapper.active_auctions(self.flapper),
-            "flops": self.flopper.active_auctions(self.flopper)
+            "flaps": self.cage_active_auctions(self.dss.flapper),
+            "flops": self.cage_active_auctions(self.dss.flopper)
         }
 
 
-    def active_auctions(self, obj) -> list:
+    def cage_active_auctions(self, parentObj) -> list:
         """ Returns auctions that meet the requiremenets to be called by End.skip, Flap.yank, and Flop.yank """
         active_auctions = []
-        auction_count = obj.kicks()+1
+        auction_count = parentObj.kicks()+1
 
         # flip auctions
-        if isinstance(obj, Flipper):
+        if isinstance(parentObj, Flipper):
             for index in range(1, auction_count):
-                bid = obj._bids(index)
+                bid = parentObj._bids(index)
                 if bid.guy != Address("0x0000000000000000000000000000000000000000"):
                     if bid.bid < bid.tab:
                         active_auctions.append(bid)
@@ -297,7 +296,7 @@ class CageKeeper:
         # flap and flop auctions
         else:
             for index in range(1, auction_count):
-                bid = obj._bids(index)
+                bid = parentObj._bids(index)
                 if bid.guy != Address("0x0000000000000000000000000000000000000000"):
                     active_auctions.append(bid)
                 index += 1
