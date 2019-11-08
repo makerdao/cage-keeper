@@ -145,6 +145,17 @@ class CageKeeper:
 
         live = self.dss.end.live()
 
+        # # ============= TESTING ============= #
+        # # check ilks
+        # ilks = self.check_ilks()
+        #
+        # # Drip all ilks
+        # for ilk in ilks:
+        #     self.dss.jug.drip(ilk).transact(gas_price=self.gas_price())
+        #
+        # self.lifecycle.terminate()
+        # # ============= TESTING ============= #
+
         if not live and not self.cage_actions:
             if self.arguments.network == 'testnet':
                 time.sleep(1) # testing purposes
@@ -154,7 +165,7 @@ class CageKeeper:
             if not live:
                 self.cage_auctions = True # so that self.facilitate_cage() won't be called again
                 self.facilitate_cage()
-
+                #TODO ensure that facilitate_cage() is looking at most recent block
 
 
     def facilitate_cage(self):
@@ -165,10 +176,6 @@ class CageKeeper:
 
         # check ilks
         ilks = self.check_ilks()
-
-        # Drip all ilks
-        for ilk in ilks:
-            self.dss.jug.drip(ilk).transact(gas_price=self.gas_price())
 
         # Get all auctions that can be yanked after cage
         auctions = self.all_active_auctions()
@@ -234,7 +241,7 @@ class CageKeeper:
         deploymentIlkNames = [i.name for i in deploymentIlks]
 
         if set(ilkNames) != set(deploymentIlkNames):
-            self.logger.info('======== WARNING, Discrepancy in frobbed ilks and collaterals in deployment file ========')
+            self.logger.info('======== NOTE, Discrepancy in frobbed ilks and collaterals in deployment file ========')
             self.logger.info(f'Frobbed ilks: {ilkNames}')
             self.logger.info(f'Deployment ilks: {deploymentIlkNames}')
             self.logger.info('=========================== Will continue with deployment ilks ==========================')
