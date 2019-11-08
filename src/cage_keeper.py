@@ -85,10 +85,6 @@ class CageKeeper:
         register_keys(self.web3, self.arguments.eth_key)
         self.our_address = Address(self.arguments.eth_from)
 
-        basepath = path.dirname(__file__)
-        filepath = path.abspath(path.join(basepath, "..", "lib", "pymaker", "config", self.arguments.network+"-addresses.json"))
-        pymaker_deployment_config = filepath
-
         if self.arguments.dss_deployment_file:
             self.dss = DssDeployment.from_json(web3=self.web3, conf=open(self.arguments.dss_deployment_file, "r").read())
         else:
@@ -150,8 +146,10 @@ class CageKeeper:
         live = self.dss.end.live()
 
         if not live and not self.cage_actions:
-            # time.sleep(180) # 12 block confirmation
-            time.sleep(1) # TODO: Remove after testing on testnet
+            if self.arguments.network == 'testnet':
+                time.sleep(1) # testing purposes
+            else:
+                time.sleep(180) # 12 block confirmation
 
             if not live:
                 self.cage_auctions = True # so that self.facilitate_cage() won't be called again

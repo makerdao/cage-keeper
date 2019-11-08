@@ -21,6 +21,7 @@ import pytest
 from datetime import datetime, timedelta
 import time
 from typing import List
+import logging
 
 from web3 import Web3
 
@@ -34,7 +35,7 @@ from pymaker.numeric import Wad, Ray, Rad
 from pymaker.shutdown import ShutdownModule, End
 
 from tests.test_auctions import create_surplus, create_debt, check_active_auctions, TestFlopper
-from tests.test_dss import mint_mkr, wrap_eth, frob
+from tests.test_dss import mint_mkr, wrap_eth, frob, set_collateral_price
 
 
 def open_cdp(mcd: DssDeployment, collateral: Collateral, address: Address):
@@ -47,8 +48,13 @@ def open_cdp(mcd: DssDeployment, collateral: Collateral, address: Address):
     assert collateral.adapter.join(address, Wad.from_number(10)).transact(from_address=address)
     frob(mcd, collateral, address, Wad.from_number(10), Wad.from_number(100))
 
-    assert mcd.vat.debt() >= Rad(Wad.from_number(15))
+    assert mcd.vat.debt() >= Rad(Wad.from_number(100))
     assert mcd.vat.dai(address) >= Rad.from_number(100)
+
+
+def open_underwater_urn(mcd: DssDeployment, collateral: Collateral, address: Address):
+    open_cdp(mcd, collateral, address)
+    set_collateral_price(mcd, collateral, Wad.from_number(1))
 
 
 def create_flap_auction(mcd: DssDeployment, deployment_address: Address, our_address: Address):
@@ -149,34 +155,96 @@ def time_travel_by(web3: Web3, seconds: int):
         web3.manager.request_blocking("evm_mine", [])
 
 
-def get_underwater_urns(mcd: DssDeployment):
+# def all_active_auctions(mcd: DssDeployment) -> dict:
+#     """ Aggregates active auctions that meet criteria to be called after Cage """
+#
+#     flips = {}
+#     for collateral in mcd.collaterals.values():
+#         # Each collateral has it's own flip contract; add auctions from each.
+#         flips[collateral.ilk.name] = self.cage_active_auctions(collateral.flipper)
+#
+#     return {
+#         "flips": flips,
+#         "flaps": self.cage_active_auctions(self.dss.flapper),
+#         "flops": self.cage_active_auctions(self.dss.flopper)
+#     }
+#
+#
+# def cage_active_auctions(parentObj) -> list:
+#     """ Returns auctions that meet the requiremenets to be called by End.skip, Flap.yank, and Flop.yank """
+#     active_auctions = []
+#     auction_count = parentObj.kicks()+1
+#
+#     # flip auctions
+#     if isinstance(parentObj, Flipper):
+#         for index in range(1, auction_count):
+#             bid = parentObj._bids(index)
+#             if bid.guy != Address("0x0000000000000000000000000000000000000000"):
+#                 if bid.bid < bid.tab:
+#                     active_auctions.append(bid)
+#             index += 1
+#
+#     # flap and flop auctions
+#     else:
+#         for index in range(1, auction_count):
+#             bid = parentObj._bids(index)
+#             if bid.guy != Address("0x0000000000000000000000000000000000000000"):
+#                 active_auctions.append(bid)
+#             index += 1
+#
+#
+#     return active_auctions
 
-    urns = mcd.vat.urns()
-    # Check if underwater, or  urn.art * ilk.rate > urn.ink * ilk.spot
-    underwater_urns = []
 
-    for ilk in urns.keys():
-        for urn in urns[ilk].keys():
-            urns[ilk][urn].ilk = mcd.vat.ilk(urns[ilk][urn].ilk.name)
-            if urns[ilk][urn].art * urns[ilk][urn].ilk.rate > urns[ilk][urn].ink * urns[ilk][urn].ilk.spot:
-                underwater_urns.append(urns[ilk][urn])
-
-    return underwater_urns
-
-
-def init_state_check(mcd: DssDeployment):
+def init_state_check(mcd: DssDeployment, cage_keeper: CageKeeper):
     # Check if cage(ilk) have not been called
     deploymentIlks = [mcd.collaterals[key].ilk for key in mcd.collaterals.keys()]
-    for ilk in deploymentIlks:
-        # print(mcd.vat.ilk(ilk.name).spot)
+    for i in deploymentIlks:
+        ilk = mcd.vat.ilk(i.name)
+        print("")
+        print(f"Name: {ilk.name}")
+        print(f"Rate: {ilk.rate}")
+        print(f"Ink: {ilk.ink}")
+        print(f"Art: {ilk.art}")
+        print(f"Spot: {ilk.spot}")
+        print(f"line: {ilk.line}")
+        print(f"dust: {ilk.dust}")
         assert mcd.end.tag(ilk) == Ray(0)
 
     # Check if any underwater urns are present
-    urns = get_underwater_urns(mcd)
-    for urn in urns:
-        assert urn.art > Wad(0)
+    urns = cage_keeper.get_underwater_urns()
+    assert urns[0].art >= Wad.from_number(100)
+    assert urns[0].ilk.spot == Wad.from_number(1)
+    assert len(urns) == 1
+    print(f"Underwater urns: {len(urns)}")
 
-    return urns
+
+    auctions = cage_keeper.all_active_auctions()
+    assert "flips" in auctions
+    assert "flaps" in auctions
+    assert "flops" in auctions
+
+    i = 0
+    for key in auctions["flips"].keys():
+        for auction in auctions["flips"][key]:
+            assert mcd.flipper.bids(auction.id).lot != 0
+            i = i + 1
+
+        print(f"flips for {key}: {i} ")
+        i = 0
+
+    for auction in auctions["flaps"]:
+        assert mcd.flopper.bids(auction.id).lot != 0
+        i = i + 1
+    print(f"flaps: {i}")
+    i = 0
+
+    for auction in auctions["flops"]:
+        assert mcd.flopper.bids(auction.id).lot != 0
+        i = i + 1
+    print(f"flops: {i}")
+
+    return urns, auctions
 
 
 
@@ -189,10 +257,20 @@ def final_state_check(mcd: DssDeployment, urns: List):
         assert mcd.end.tag(ilk) > Ray(0)
 
     # All underwater urns present before ES have been skimmed
-    for urn in urns:
-        urn = mcd.vat.urn(urn.ilk, urn.address)
+    for i in urns:
+        urn = mcd.vat.urn(i.ilk, i.address)
         assert urn.art == Wad(0)
 
+    # All auctions active before cage have been yanked
+    for ilk in auctions["flips"].keys():
+        for auction in auctions["flips"][ilk]:
+            assert mcd.flipper.bids(auction.id).lot == 0
+
+    for auction in auctions["flaps"]:
+        assert mcd.flopper.bids(auction.id).lot == 0
+
+    for auction in auctions["flops"]:
+        assert mcd.flopper.bids(auction.id).lot == 0
 
 
 
@@ -203,7 +281,7 @@ nobody = Address("0x0000000000000000000000000000000000000000")
 
 class TestCageKeeper:
 
-    def test_cage_keeper(self, mcd, deployment_address, our_address, keeper_address):
+    def test_cage_keeper(self, mcd, deployment_address, our_address, other_address, keeper_address):
         prepare_esm(mcd, our_address)
 
         # Annialate Dai with Sin, if Sin > Dai
@@ -215,17 +293,17 @@ class TestCageKeeper:
         print(mcd.flapper.kicks())
         print(mcd.flopper.kicks())
 
-        init_state_check(mcd)
+        #To make sure CageKeeper doesn't do anything funky with initial state
+        # init_state_check(mcd, keeper)
 
-
-        open_cdp(mcd, mcd.collaterals['ETH-A'], our_address)
-
-
+        # Two urns created
+        open_underwater_urn(mcd, mcd.collaterals['ETH-A'], our_address)
+        open_cdp(mcd, mcd.collaterals['ETH-C'], other_address)
 
         keeper = CageKeeper(args=((f"--eth-from {keeper_address} --network testnet").split()), web3=mcd.web3)
         assert isinstance(keeper, CageKeeper)
 
-        urns = init_state_check(mcd)
+        urns = init_state_check(mcd, keeper)
         keeper.check_cage()
 
         # CageKeeper.facilitate_cage should not have been called
