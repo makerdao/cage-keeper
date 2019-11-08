@@ -175,7 +175,6 @@ class CageKeeper:
         # Get all auctions that can be yanked after cage
         auctions = self.all_active_auctions()
 
-        # TODO, see if bid ids can be exposed on Bid object in pymaker
         # Yank all flap and flop auctions
         self.yank_auctions(auctions["flaps"], auctions["flops"])
 

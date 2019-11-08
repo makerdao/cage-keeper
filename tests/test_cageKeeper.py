@@ -20,6 +20,7 @@ import pytest
 
 from datetime import datetime, timedelta
 import time
+from typing import List
 
 from web3 import Web3
 
@@ -32,7 +33,7 @@ from pymaker.dss import Collateral
 from pymaker.numeric import Wad, Ray, Rad
 from pymaker.shutdown import ShutdownModule, End
 
-from tests.test_auctions import create_surplus
+from tests.test_auctions import create_surplus, create_debt, check_active_auctions, TestFlopper
 from tests.test_dss import mint_mkr, wrap_eth, frob
 
 
@@ -44,10 +45,10 @@ def open_cdp(mcd: DssDeployment, collateral: Collateral, address: Address):
     collateral.approve(address)
     wrap_eth(mcd, address, Wad.from_number(10))
     assert collateral.adapter.join(address, Wad.from_number(10)).transact(from_address=address)
-    frob(mcd, collateral, address, Wad.from_number(10), Wad.from_number(15))
+    frob(mcd, collateral, address, Wad.from_number(10), Wad.from_number(100))
 
     assert mcd.vat.debt() >= Rad(Wad.from_number(15))
-    assert mcd.vat.dai(address) >= Rad.from_number(10)
+    assert mcd.vat.dai(address) >= Rad.from_number(100)
 
 
 def create_flap_auction(mcd: DssDeployment, deployment_address: Address, our_address: Address):
@@ -56,7 +57,11 @@ def create_flap_auction(mcd: DssDeployment, deployment_address: Address, our_add
     assert isinstance(our_address, Address)
 
     flapper = mcd.flapper
+    print(f"Before Surplus: {mcd.vat.dai(mcd.vow.address)}")
     create_surplus(mcd, flapper, deployment_address)
+    print(f"After Surplus: {mcd.vat.dai(mcd.vow.address)}")
+
+    # Kick off the flap auction
     joy = mcd.vat.dai(mcd.vow.address)
     assert joy > mcd.vat.sin(mcd.vow.address) + mcd.vow.bump() + mcd.vow.hump()
     assert (mcd.vat.sin(mcd.vow.address) - mcd.vow.sin()) - mcd.vow.ash() == Rad(0)
@@ -67,6 +72,66 @@ def create_flap_auction(mcd: DssDeployment, deployment_address: Address, our_add
     bid = Wad.from_number(0.001)
     assert mcd.mkr.balance_of(our_address) > bid
     assert flapper.tend(flapper.kicks(), mcd.vow.bump(), bid).transact(from_address=our_address)
+
+def create_flop_auction(mcd: DssDeployment, deployment_address: Address, our_address: Address):
+    assert isinstance(mcd, DssDeployment)
+    assert isinstance(deployment_address, Address)
+    assert isinstance(our_address, Address)
+
+    flopper = mcd.flopper
+    print(f"Before Debt: {mcd.vat.sin(mcd.vow.address)}")
+    create_debt(mcd.web3, mcd, our_address, deployment_address)
+    print(f"After Debt: {mcd.vat.sin(mcd.vow.address)}")
+
+    # Kick off the flop auction
+    assert flopper.kicks() == 0
+    assert len(flopper.active_auctions()) == 0
+    assert mcd.vat.dai(mcd.vow.address) == Rad(0)
+    assert mcd.vow.flop().transact()
+    kick = flopper.kicks()
+    assert kick == 1
+    assert len(flopper.active_auctions()) == 1
+    check_active_auctions(flopper)
+    current_bid = flopper.bids(kick)
+
+
+    bid = Wad.from_number()
+    flopper.approve(mcd.vat.address, hope_directly())
+    assert mcd.vat.can(our_address, flopper.address)
+    TestFlopper.dent(flopper, kick, our_address, bid, current_bid.bid)
+    current_bid = flopper.bids(kick)
+    assert current_bid.guy == our_address
+
+
+def prepare_esm(mcd: DssDeployment, our_address: Address):
+    assert mcd.esm is not None
+    assert isinstance(mcd.esm, ShutdownModule)
+    assert isinstance(mcd.esm.address, Address)
+    assert mcd.esm.sum() == Wad(0)
+    assert mcd.esm.min() > Wad(0)
+    assert not mcd.esm.fired()
+
+    assert mcd.mkr.approve(mcd.esm.address).transact()
+
+    # This should have no effect yet succeed regardless
+    assert mcd.esm.join(Wad(0)).transact()
+    assert mcd.esm.sum() == Wad(0)
+    assert mcd.esm.sum_of(our_address) == Wad(0)
+
+
+    # Mint and join a min amount to call esm.fire
+    mint_mkr(mcd.mkr, our_address, mcd.esm.min())
+    assert mcd.esm.join(mcd.esm.min()).transact()
+    assert mcd.esm.sum() == mcd.esm.min()
+
+
+def fire_esm(mcd: DssDeployment):
+    assert mcd.end.live()
+    assert mcd.esm.fire().transact()
+    assert mcd.esm.fired()
+    assert not mcd.end.live()
+
+
 
 
 def time_travel_by(web3: Web3, seconds: int):
@@ -84,56 +149,98 @@ def time_travel_by(web3: Web3, seconds: int):
         web3.manager.request_blocking("evm_mine", [])
 
 
+def get_underwater_urns(mcd: DssDeployment):
+
+    urns = mcd.vat.urns()
+    # Check if underwater, or  urn.art * ilk.rate > urn.ink * ilk.spot
+    underwater_urns = []
+
+    for ilk in urns.keys():
+        for urn in urns[ilk].keys():
+            urns[ilk][urn].ilk = mcd.vat.ilk(urns[ilk][urn].ilk.name)
+            if urns[ilk][urn].art * urns[ilk][urn].ilk.rate > urns[ilk][urn].ink * urns[ilk][urn].ilk.spot:
+                underwater_urns.append(urns[ilk][urn])
+
+    return underwater_urns
+
+
+def init_state_check(mcd: DssDeployment):
+    # Check if cage(ilk) have not been called
+    deploymentIlks = [mcd.collaterals[key].ilk for key in mcd.collaterals.keys()]
+    for ilk in deploymentIlks:
+        # print(mcd.vat.ilk(ilk.name).spot)
+        assert mcd.end.tag(ilk) == Ray(0)
+
+    # Check if any underwater urns are present
+    urns = get_underwater_urns(mcd)
+    for urn in urns:
+        assert urn.art > Wad(0)
+
+    return urns
+
+
+
+
+def final_state_check(mcd: DssDeployment, urns: List):
+    # Check if cage(ilk) called on all ilks
+    deploymentIlks = [mcd.collaterals[key].ilk for key in mcd.collaterals.keys()]
+    for ilk in deploymentIlks:
+        # print(mcd.vat.ilk(ilk.name).spot)
+        assert mcd.end.tag(ilk) > Ray(0)
+
+    # All underwater urns present before ES have been skimmed
+    for urn in urns:
+        urn = mcd.vat.urn(urn.ilk, urn.address)
+        assert urn.art == Wad(0)
+
+
+
+
+
+
 nobody = Address("0x0000000000000000000000000000000000000000")
 
 
 class TestCageKeeper:
 
     def test_cage_keeper(self, mcd, deployment_address, our_address, keeper_address):
-        assert mcd.esm is not None
-        assert isinstance(mcd.esm, ShutdownModule)
-        assert isinstance(mcd.esm.address, Address)
-        assert mcd.esm.sum() == Wad(0)
-        assert mcd.esm.min() > Wad(0)
-        assert not mcd.esm.fired()
+        prepare_esm(mcd, our_address)
 
-        joy = mcd.vat.dai(mcd.vow.address)
-        awe = mcd.vat.sin(mcd.vow.address)
+        # Annialate Dai with Sin, if Sin > Dai
+        dai = mcd.vat.dai(mcd.vow.address)
+        assert mcd.vow.heal(dai).transact()
 
-        if joy == Rad(0) and awe == Rad(0):
-            create_flap_auction(mcd, deployment_address, our_address)
+        # create_flop_auction(mcd, deployment_address, our_address)
+        # create_flap_auction(mcd, deployment_address, our_address)
+        print(mcd.flapper.kicks())
+        print(mcd.flopper.kicks())
 
-        assert mcd.mkr.approve(mcd.esm.address).transact()                # Approve esm to pull MKR from our address
+        init_state_check(mcd)
 
-        # This should have no effect yet succeed regardless
-        assert mcd.esm.join(Wad(0)).transact()
-        assert mcd.esm.sum() == Wad(0)
-        assert mcd.esm.sum_of(our_address) == Wad(0)
-
-        mint_mkr(mcd.mkr, our_address, mcd.esm.min())                 # Mint min amount of MKR to our_address
-        assert mcd.esm.join(mcd.esm.min()).transact()                     # Join min amount of MKR to call esm.fire()
-        assert mcd.esm.sum() == mcd.esm.min()                             # ensure minimum is reached to call esm.fire()
 
         open_cdp(mcd, mcd.collaterals['ETH-A'], our_address)
+
+
 
         keeper = CageKeeper(args=((f"--eth-from {keeper_address} --network testnet").split()), web3=mcd.web3)
         assert isinstance(keeper, CageKeeper)
 
+        urns = init_state_check(mcd)
         keeper.check_cage()
 
-        assert mcd.end.live()
-        assert mcd.esm.fire().transact()
-        assert mcd.esm.fired()
-        assert not mcd.end.live()
+        # CageKeeper.facilitate_cage should not have been called
+        assert mcd.end.tag(mcd.vat.ilk('ETH-A')) == Ray(0)
+
+        fire_esm(mcd)
 
         keeper.check_cage()
+        final_state_check(mcd, urns)
 
 
-        # Check if cage(ilk) called on all ilks
-        deploymentIlks = [mcd.collaterals[key].ilk for key in mcd.collaterals.keys()]
 
-        for ilk in deploymentIlks:
-            assert mcd.end.tag(ilk) > Ray(0)
+
+        # Ending to stop the test
+        deploymentIlks = [mcd.collaterals.ilk for key in mcd.collaterals.keys()]
 
 
 
