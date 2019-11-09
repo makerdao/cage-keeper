@@ -96,6 +96,8 @@ class CageKeeper:
         self.errors = 0
 
         self.cage_actions = False
+        self.timePassed = False
+        self.confirmations = 0
 
 
         logging.basicConfig(format='%(asctime)-15s %(levelname)-8s %(message)s',
@@ -126,6 +128,7 @@ class CageKeeper:
         self.logger.info(f'Flapper: {self.dss.flapper.address}')
         self.logger.info(f'Flopper: {self.dss.flopper.address}')
         self.logger.info(f'Jug: {self.dss.jug.address}')
+        self.logger.info(f'End: {self.dss.end.address}')
         self.logger.info('')
 
 
@@ -145,31 +148,22 @@ class CageKeeper:
 
         live = self.dss.end.live()
 
-        # # ============= TESTING ============= #
-        # # check ilks
-        # ilks = self.check_ilks()
-        #
-        # # Drip all ilks
-        # for ilk in ilks:
-        #     self.dss.jug.drip(ilk).transact(gas_price=self.gas_price())
-        #
-        # self.lifecycle.terminate()
-        # # ============= TESTING ============= #
+        if not live and (self.confirmations == 1):
+            self.logger.info('======== System has been caged (12 confirmations) ========')
+            self.timePassed = False
+            self.facilitate_cage()
+            self.lifecycle.terminate()
+        elif not live and self.confirmations < 12:
+            self.logger.info(f'======== System has been caged ( {self.confirmations} confirmations) ========')
+            self.confirmations = self.confirmations + 1
 
-        if not live and not self.cage_actions:
-            if self.arguments.network == 'testnet':
-                time.sleep(1) # testing purposes
-            else:
-                time.sleep(180) # 12 block confirmation
 
-            if not live:
-                self.cage_auctions = True # so that self.facilitate_cage() won't be called again
-                self.facilitate_cage()
-                #TODO ensure that facilitate_cage() is looking at most recent block
 
 
     def facilitate_cage(self):
-        self.logger.info('Facilitating Cage')
+        self.logger.info('')
+        self.logger.info('======== Facilitating Cage ========')
+        self.logger.info('')
 
         # Get End.wait in seconds (processing time)
         wait = self.dss.end.wait()
@@ -182,6 +176,7 @@ class CageKeeper:
 
         # Yank all flap and flop auctions
         self.yank_auctions(auctions["flaps"], auctions["flops"])
+
 
         # Cage all ilks
         for ilk in ilks:
@@ -245,6 +240,7 @@ class CageKeeper:
             self.logger.info(f'Frobbed ilks: {ilkNames}')
             self.logger.info(f'Deployment ilks: {deploymentIlkNames}')
             self.logger.info('=========================== Will continue with deployment ilks ==========================')
+            self.logger.info('')
 
         return deploymentIlks
 
