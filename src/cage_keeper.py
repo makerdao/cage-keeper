@@ -35,7 +35,7 @@ from pymaker.lifecycle import Lifecycle
 from pymaker.numeric import Wad, Rad
 from pymaker.token import ERC20Token
 from pymaker.deployment import DssDeployment
-from pymaker.dss import Ilk
+from pymaker.dss import Ilk, Urn
 
 class CageKeeper:
     """Keeper to facilitate Emergency Shutdown"""
@@ -95,8 +95,7 @@ class CageKeeper:
         self.max_errors = self.arguments.max_errors
         self.errors = 0
 
-        self.cage_actions = False
-        self.timePassed = False
+        self.cage_facilitated = False
         self.confirmations = 0
 
 
@@ -150,7 +149,7 @@ class CageKeeper:
 
         if not live and (self.confirmations == 1):
             self.logger.info('======== System has been caged (12 confirmations) ========')
-            self.timePassed = False
+            self.cage_facilitated = True
             self.facilitate_cage()
             self.lifecycle.terminate()
         elif not live and self.confirmations < 12:
@@ -176,7 +175,6 @@ class CageKeeper:
 
         # Yank all flap and flop auctions
         self.yank_auctions(auctions["flaps"], auctions["flops"])
-
 
         # Cage all ilks
         for ilk in ilks:
@@ -214,7 +212,7 @@ class CageKeeper:
 
 
 
-    def get_ilks(self):
+    def get_ilks(self)-> List[Ilk]:
         """ From the block of Vat contract deployment, check which ilks have been frobbed  """
         current_blockNumber = self.web3.eth.blockNumber
         blocks = current_blockNumber - self.deployment_block
@@ -227,7 +225,7 @@ class CageKeeper:
 
 
 
-    def check_ilks(self):
+    def check_ilks(self) -> List[Ilk]:
 
         ilks = self.get_ilks()
         ilkNames = [i.name for i in ilks]
@@ -246,7 +244,7 @@ class CageKeeper:
 
 
 
-    def get_underwater_urns(self):
+    def get_underwater_urns(self) -> List[Urn]:
 
         urns = self.dss.vat.urns(from_block=self.deployment_block)
 
@@ -279,7 +277,7 @@ class CageKeeper:
         }
 
 
-    def cage_active_auctions(self, parentObj) -> list:
+    def cage_active_auctions(self, parentObj) -> List:
         """ Returns auctions that meet the requiremenets to be called by End.skip, Flap.yank, and Flop.yank """
         active_auctions = []
         auction_count = parentObj.kicks()+1

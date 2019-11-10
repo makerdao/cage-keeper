@@ -30,7 +30,7 @@ from src.cage_keeper import CageKeeper
 from pymaker import Address
 from pymaker.approval import directly, hope_directly
 from pymaker.deployment import DssDeployment
-from pymaker.dss import Collateral
+from pymaker.dss import Collateral, Ilk, Urn
 from pymaker.numeric import Wad, Ray, Rad
 from pymaker.shutdown import ShutdownModule, End
 
@@ -38,7 +38,7 @@ from tests.test_auctions import create_surplus, create_debt, check_active_auctio
 from tests.test_dss import mint_mkr, wrap_eth, frob, set_collateral_price
 
 
-def open_cdp(mcd: DssDeployment, collateral: Collateral, address: Address):
+def open_cdp(mcd: DssDeployment, collateral: Collateral, address: Address, debtMultiplier: int = 1):
     assert isinstance(mcd, DssDeployment)
     assert isinstance(collateral, Collateral)
     assert isinstance(address, Address)
@@ -46,15 +46,26 @@ def open_cdp(mcd: DssDeployment, collateral: Collateral, address: Address):
     collateral.approve(address)
     wrap_eth(mcd, address, Wad.from_number(10))
     assert collateral.adapter.join(address, Wad.from_number(10)).transact(from_address=address)
-    frob(mcd, collateral, address, Wad.from_number(10), Wad.from_number(100))
+    frob(mcd, collateral, address, Wad.from_number(10), Wad.from_number(1 * debtMultiplier))
 
-    assert mcd.vat.debt() >= Rad(Wad.from_number(100))
-    assert mcd.vat.dai(address) >= Rad.from_number(100)
+    assert mcd.vat.debt() >= Rad(Wad.from_number(1 * debtMultiplier))
+    assert mcd.vat.dai(address) >= Rad.from_number(1 * debtMultiplier)
+
+
+def wipe_debt(mcd: DssDeployment, collateral: Collateral, address: Address):
+    urn = mcd.vat.urn(collateral.ilk, address)
+    assert Rad(urn.art) >= mcd.vat.dai(address)
+    frob(mcd, collateral, address, Wad(0), Wad(mcd.vat.dai(address)) * -1) #because there is residual state on the testchain
+    assert mcd.vat.dai(address) == Rad(0)
 
 
 def open_underwater_urn(mcd: DssDeployment, collateral: Collateral, address: Address):
-    open_cdp(mcd, collateral, address)
+    open_cdp(mcd, collateral, address, 11)
     set_collateral_price(mcd, collateral, Wad.from_number(1))
+
+    urn = mcd.vat.urn(collateral.ilk, address)
+    ilk = mcd.vat.ilk(collateral.ilk.name)
+    assert (urn.art * ilk.rate) > (urn.ink * ilk.spot)
 
 
 def create_flap_auction(mcd: DssDeployment, deployment_address: Address, our_address: Address):
@@ -155,47 +166,6 @@ def time_travel_by(web3: Web3, seconds: int):
         web3.manager.request_blocking("evm_mine", [])
 
 
-# def all_active_auctions(mcd: DssDeployment) -> dict:
-#     """ Aggregates active auctions that meet criteria to be called after Cage """
-#
-#     flips = {}
-#     for collateral in mcd.collaterals.values():
-#         # Each collateral has it's own flip contract; add auctions from each.
-#         flips[collateral.ilk.name] = self.cage_active_auctions(collateral.flipper)
-#
-#     return {
-#         "flips": flips,
-#         "flaps": self.cage_active_auctions(self.dss.flapper),
-#         "flops": self.cage_active_auctions(self.dss.flopper)
-#     }
-#
-#
-# def cage_active_auctions(parentObj) -> list:
-#     """ Returns auctions that meet the requiremenets to be called by End.skip, Flap.yank, and Flop.yank """
-#     active_auctions = []
-#     auction_count = parentObj.kicks()+1
-#
-#     # flip auctions
-#     if isinstance(parentObj, Flipper):
-#         for index in range(1, auction_count):
-#             bid = parentObj._bids(index)
-#             if bid.guy != Address("0x0000000000000000000000000000000000000000"):
-#                 if bid.bid < bid.tab:
-#                     active_auctions.append(bid)
-#             index += 1
-#
-#     # flap and flop auctions
-#     else:
-#         for index in range(1, auction_count):
-#             bid = parentObj._bids(index)
-#             if bid.guy != Address("0x0000000000000000000000000000000000000000"):
-#                 active_auctions.append(bid)
-#             index += 1
-#
-#
-#     return active_auctions
-
-
 def init_state_check(mcd: DssDeployment, cage_keeper: CageKeeper):
     # Check if cage(ilk) have not been called
     deploymentIlks = [mcd.collaterals[key].ilk for key in mcd.collaterals.keys()]
@@ -274,6 +244,9 @@ def final_state_check(mcd: DssDeployment, urns: List):
 
 
 
+# def args(arguments: str) -> list:
+#     return arguments.split()
+
 
 
 nobody = Address("0x0000000000000000000000000000000000000000")
@@ -281,7 +254,73 @@ nobody = Address("0x0000000000000000000000000000000000000000")
 
 class TestCageKeeper:
 
-    def test_cage_keeper(self, mcd, deployment_address, our_address, other_address, keeper_address):
+    # def setup_method(self, mcd: DssDeployment, keeper_address: Address):
+    #     self.keeper = CageKeeper(args=args(f"--eth-from {keeper_address} --network testnet"), web3=mcd.web3)
+    #     assert isinstance(self.keeper, CageKeeper)
+
+    def test_get_ilks(self, mcd: DssDeployment, keeper: CageKeeper):
+        ilks = keeper.get_ilks()
+        assert type(ilks) is list
+        assert all(isinstance(x, Ilk) for x in ilks)
+        deploymentIlks = [mcd.vat.ilk(key) for key in mcd.collaterals.keys()]
+        assert all(elem in deploymentIlks for elem in ilks)
+
+
+    def test_check_ilks(self, mcd: DssDeployment, keeper: CageKeeper):
+        ilks = keeper.check_ilks()
+        ilkNames = ilkNames = [i.name for i in ilks]
+        assert type(ilks) is list
+        assert all(isinstance(x, Ilk) for x in ilks)
+        deploymentIlkNames = [mcd.collaterals[key].ilk.name for key in mcd.collaterals.keys()]
+        assert set(ilkNames) == set(deploymentIlkNames)
+
+    def test_get_underwater_urns(self, mcd: DssDeployment, keeper: CageKeeper, guy_address: Address, our_address: Address):
+        wipe_debt(mcd, mcd.collaterals['ETH-A'], guy_address)
+        wipe_debt(mcd, mcd.collaterals['ETH-A'], our_address)
+
+        open_underwater_urn(mcd, mcd.collaterals['ETH-A'], guy_address)
+        open_cdp(mcd, mcd.collaterals['ETH-C'], our_address)
+
+        urns = keeper.get_underwater_urns()
+        assert type(urns) is list
+        assert all(isinstance(x, Urn) for x in urns)
+        assert len(urns) == 1
+        assert urns[0].address.address == guy_address.address
+
+
+    @pytest.mark.skip(reason="possibly incomplete")
+    def test_active_auctions(self, mcd: DssDeployment, keeper: CageKeeper, our_address: Address, other_address: Address):
+        #TODO create some auctions
+        # Ensure they are in a state that can't be pulled by this function
+
+        create_flap_auction(mcd, deployment_address, our_address)
+        create_flop_auction(mcd, deployment_address, other_address)
+
+
+        auctions = keeper.all_active_auctions()
+        assert "flips" in auctions
+        assert "flops" in auctions
+        assert "flaps" in auctions
+
+        # All auctions active before cage have been yanked
+        for ilk in auctions["flips"].keys():
+            for auction in auctions["flips"][ilk]:
+                assert auction.id > 0
+                assert auction.guy != nobody
+                assert auction.bid < bid.tab
+
+        assert len(auctions["flaps"]) == 1
+        for auction in auctions["flaps"]:
+            assert auction.id > 0
+            assert auction.guy != nobody
+
+        assert len(auctions["flops"]) == 1
+        for auction in auctions["flops"]:
+            assert auction.id > 0
+            assert auction.guy != nobody
+
+    @pytest.mark.skip(reason="possibly incomplete")
+    def test_cage_keeper(self, mcd, deployment_address, our_address, guy_address, keeper_address):
         prepare_esm(mcd, our_address)
 
         # Annialate Dai with Sin, if Sin > Dai
@@ -298,20 +337,18 @@ class TestCageKeeper:
 
         # Two urns created
         open_underwater_urn(mcd, mcd.collaterals['ETH-A'], our_address)
-        open_cdp(mcd, mcd.collaterals['ETH-C'], other_address)
+        open_cdp(mcd, mcd.collaterals['ETH-C'], guy_address)
 
-        keeper = CageKeeper(args=((f"--eth-from {keeper_address} --network testnet").split()), web3=mcd.web3)
-        assert isinstance(keeper, CageKeeper)
 
         urns = init_state_check(mcd, keeper)
-        keeper.check_cage()
+        self.keeper.check_cage()
 
         # CageKeeper.facilitate_cage should not have been called
         assert mcd.end.tag(mcd.vat.ilk('ETH-A')) == Ray(0)
 
         fire_esm(mcd)
 
-        keeper.check_cage()
+        self.keeper.check_cage()
         final_state_check(mcd, urns)
 
 
@@ -319,11 +356,6 @@ class TestCageKeeper:
 
         # Ending to stop the test
         deploymentIlks = [mcd.collaterals.ilk for key in mcd.collaterals.keys()]
-
-
-
-
-
 
     @pytest.mark.skip(reason="unable to determine redemption price")
     def test_join(self, mcd, our_address):
@@ -353,93 +385,93 @@ class TestCageKeeper:
         assert mcd.esm.fire().transact()
         assert mcd.esm.fired()
         assert not mcd.end.live()
-
-@pytest.mark.skip(reason="unable to determine redemption price")
-class TestEnd:
-    """This test must be run after TestShutdownModule, which calls `esm.fire`."""
-
-    def test_init(self, mcd):
-        assert mcd.end is not None
-        assert isinstance(mcd.end, End)
-        assert isinstance(mcd.esm.address, Address)
-
-    def test_getters(self, mcd):
-        assert not mcd.end.live()
-        assert datetime.utcnow() - timedelta(minutes=5) < mcd.end.when() < datetime.utcnow()
-        assert mcd.end.wait() >= 0
-        assert mcd.end.debt() >= Rad(0)
-
-        for collateral in mcd.collaterals.values():
-            ilk = collateral.ilk
-            assert mcd.end.tag(ilk) == Ray(0)
-            assert mcd.end.gap(ilk) == Wad(0)
-            assert mcd.end.art(ilk) == Wad(0)
-            assert mcd.end.fix(ilk) == Ray(0)
-
-    def test_cage(self, mcd):
-        collateral = mcd.collaterals['ETH-A']
-        ilk = collateral.ilk
-
-        assert mcd.end.cage(ilk).transact()
-        assert mcd.end.art(ilk) > Wad(0)
-        assert mcd.end.tag(ilk) > Ray(0)
-
-    def test_yank(self, mcd):
-        last_flap = mcd.flapper.bids(mcd.flapper.kicks())
-        last_flop = mcd.flopper.bids(mcd.flopper.kicks())
-        if last_flap.end > 0 and last_flap.guy is not nobody:
-            auction = mcd.flapper
-        elif last_flop.end > 0 and last_flop.guy is not nobody:
-            auction = mcd.flopper
-        else:
-            auction = None
-
-        if auction:
-            print(f"active {auction} auction: {auction.bids(auction.kicks())}")
-            assert not auction.live()
-            kick = auction.kicks()
-            assert auction.yank(kick).transact()
-            assert auction.bids(kick).guy == nobody
-
-    def test_skim(self, mcd, our_address):
-        ilk = mcd.collaterals['ETH-A'].ilk
-
-        urn = mcd.vat.urn(ilk, our_address)
-        owe = Ray(urn.art) * mcd.vat.ilk(ilk.name).rate * mcd.end.tag(ilk)
-        assert owe > Ray(0)
-        wad = min(Ray(urn.ink), owe)
-        print(f"owe={owe} wad={wad}")
-
-        assert mcd.end.skim(ilk, our_address).transact()
-        assert mcd.vat.urn(ilk, our_address).art == Wad(0)
-        assert mcd.vat.urn(ilk, our_address).ink > Wad(0)
-        assert mcd.vat.sin(mcd.vow.address) > Rad(0)
-
-        assert mcd.vat.debt() > Rad(0)
-        assert mcd.vat.vice() > Rad(0)
-
-    @pytest.mark.skip(reason="unable to determine redemption price")
-    def test_close_cdp(self, mcd, our_address):
-        collateral = mcd.collaterals['ETH-A']
-        ilk = collateral.ilk
-
-        assert mcd.end.free(ilk).transact()
-        assert mcd.vat.urn(ilk, our_address).ink == Wad(0)
-        assert mcd.vat.gem(ilk, our_address) > Wad(0)
-        assert collateral.adapter.exit(our_address, mcd.vat.gem(ilk, our_address)).transact()
-
-        assert mcd.end.wait() == 0
-        assert mcd.end.thaw().transact()
-        assert mcd.end.flow(ilk).transact()
-        # FIXME: `flow` should determine redemption price for the collateral
-        assert mcd.end.fix(ilk) > Ray(0)
-
-    @pytest.mark.skip(reason="unable to add dai to the `bag`")
-    def test_pack(self, mcd, our_address):
-        assert mcd.end.bag(our_address) == Wad(0)
-        assert mcd.end.debt() > Rad(0)
-        assert mcd.dai.approve(mcd.end.address).transact()
-        assert mcd.vat.dai(our_address) >= Rad.from_number(10)
-        # FIXME: `pack` fails, possibly because we're passing 0 to `vat.flux`
-        assert mcd.end.pack(Wad.from_number(10)).transact()
-        assert mcd.end.bag(our_address) == Wad.from_number(10)
+#
+# @pytest.mark.skip(reason="unable to determine redemption price")
+# class TestEnd:
+    # """This test must be run after TestShutdownModule, which calls `esm.fire`."""
+    #
+    # def test_init(self, mcd):
+    #     assert mcd.end is not None
+    #     assert isinstance(mcd.end, End)
+    #     assert isinstance(mcd.esm.address, Address)
+    #
+    # def test_getters(self, mcd):
+    #     assert not mcd.end.live()
+    #     assert datetime.utcnow() - timedelta(minutes=5) < mcd.end.when() < datetime.utcnow()
+    #     assert mcd.end.wait() >= 0
+    #     assert mcd.end.debt() >= Rad(0)
+    #
+    #     for collateral in mcd.collaterals.values():
+    #         ilk = collateral.ilk
+    #         assert mcd.end.tag(ilk) == Ray(0)
+    #         assert mcd.end.gap(ilk) == Wad(0)
+    #         assert mcd.end.art(ilk) == Wad(0)
+    #         assert mcd.end.fix(ilk) == Ray(0)
+    #
+    # def test_cage(self, mcd):
+    #     collateral = mcd.collaterals['ETH-A']
+    #     ilk = collateral.ilk
+    #
+    #     assert mcd.end.cage(ilk).transact()
+    #     assert mcd.end.art(ilk) > Wad(0)
+    #     assert mcd.end.tag(ilk) > Ray(0)
+    #
+    # def test_yank(self, mcd):
+    #     last_flap = mcd.flapper.bids(mcd.flapper.kicks())
+    #     last_flop = mcd.flopper.bids(mcd.flopper.kicks())
+    #     if last_flap.end > 0 and last_flap.guy is not nobody:
+    #         auction = mcd.flapper
+    #     elif last_flop.end > 0 and last_flop.guy is not nobody:
+    #         auction = mcd.flopper
+    #     else:
+    #         auction = None
+    #
+    #     if auction:
+    #         print(f"active {auction} auction: {auction.bids(auction.kicks())}")
+    #         assert not auction.live()
+    #         kick = auction.kicks()
+    #         assert auction.yank(kick).transact()
+    #         assert auction.bids(kick).guy == nobody
+    #
+    # def test_skim(self, mcd, our_address):
+    #     ilk = mcd.collaterals['ETH-A'].ilk
+    #
+    #     urn = mcd.vat.urn(ilk, our_address)
+    #     owe = Ray(urn.art) * mcd.vat.ilk(ilk.name).rate * mcd.end.tag(ilk)
+    #     assert owe > Ray(0)
+    #     wad = min(Ray(urn.ink), owe)
+    #     print(f"owe={owe} wad={wad}")
+    #
+    #     assert mcd.end.skim(ilk, our_address).transact()
+    #     assert mcd.vat.urn(ilk, our_address).art == Wad(0)
+    #     assert mcd.vat.urn(ilk, our_address).ink > Wad(0)
+    #     assert mcd.vat.sin(mcd.vow.address) > Rad(0)
+    #
+    #     assert mcd.vat.debt() > Rad(0)
+    #     assert mcd.vat.vice() > Rad(0)
+    #
+    # @pytest.mark.skip(reason="unable to determine redemption price")
+    # def test_close_cdp(self, mcd, our_address):
+    #     collateral = mcd.collaterals['ETH-A']
+    #     ilk = collateral.ilk
+    #
+    #     assert mcd.end.free(ilk).transact()
+    #     assert mcd.vat.urn(ilk, our_address).ink == Wad(0)
+    #     assert mcd.vat.gem(ilk, our_address) > Wad(0)
+    #     assert collateral.adapter.exit(our_address, mcd.vat.gem(ilk, our_address)).transact()
+    #
+    #     assert mcd.end.wait() == 0
+    #     assert mcd.end.thaw().transact()
+    #     assert mcd.end.flow(ilk).transact()
+    #     # FIXME: `flow` should determine redemption price for the collateral
+    #     assert mcd.end.fix(ilk) > Ray(0)
+    #
+    # @pytest.mark.skip(reason="unable to add dai to the `bag`")
+    # def test_pack(self, mcd, our_address):
+    #     assert mcd.end.bag(our_address) == Wad(0)
+    #     assert mcd.end.debt() > Rad(0)
+    #     assert mcd.dai.approve(mcd.end.address).transact()
+    #     assert mcd.vat.dai(our_address) >= Rad.from_number(10)
+    #     # FIXME: `pack` fails, possibly because we're passing 0 to `vat.flux`
+    #     assert mcd.end.pack(Wad.from_number(10)).transact()
+    #     assert mcd.end.bag(our_address) == Wad.from_number(10)

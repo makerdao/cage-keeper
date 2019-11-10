@@ -28,6 +28,8 @@ from pymaker.dss import Vat, Vow, Cat, Jug, Pot
 from pymaker.shutdown import ShutdownModule, End
 from pymaker.keys import register_keys
 
+from src.cage_keeper import CageKeeper
+
 
 @pytest.fixture(scope='session')
 def new_deployment() -> Deployment:
@@ -65,15 +67,17 @@ def web3() -> Web3:
 def our_address(web3) -> Address:
     return Address(web3.eth.accounts[0])
 
-
 @pytest.fixture(scope="session")
-def other_address(web3) -> Address:
+def guy_address(web3) -> Address:
     return Address(web3.eth.accounts[1])
 
 @pytest.fixture(scope="session")
 def keeper_address(web3) -> Address:
     return Address(web3.eth.accounts[2])
 
+@pytest.fixture(scope="session")
+def other_address(web3) -> Address:
+    return Address(web3.eth.accounts[3])
 
 @pytest.fixture(scope="session")
 def deployment_address(web3) -> Address:
@@ -101,6 +105,15 @@ def mcd(web3) -> DssDeployment:
 
     return deployment
 
+@pytest.fixture(scope="session")
+def keeper(mcd: DssDeployment, keeper_address: Address) -> CageKeeper:
+    keeper = CageKeeper(args=args(f"--eth-from {keeper_address} --network testnet"), web3=mcd.web3)
+    assert isinstance(keeper, CageKeeper)
+
+    return keeper
+
+def args(arguments: str) -> list:
+    return arguments.split()
 
 def validate_contracts_loaded(deployment: DssDeployment):
     assert isinstance(deployment.vat, Vat)
