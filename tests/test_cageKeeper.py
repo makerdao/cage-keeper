@@ -84,6 +84,7 @@ def create_flap_auction(mcd: DssDeployment, deployment_address: Address, our_add
     assert (mcd.vat.sin(mcd.vow.address) - mcd.vow.sin()) - mcd.vow.ash() == Rad(0)
     assert mcd.vow.flap().transact()
 
+    
     mint_mkr(mcd.mkr, our_address, Wad.from_number(10))
     flapper.approve(mcd.mkr.address, directly(from_address=our_address))
     bid = Wad.from_number(0.001)
@@ -275,8 +276,7 @@ class TestCageKeeper:
         assert set(ilkNames) == set(deploymentIlkNames)
 
     def test_get_underwater_urns(self, mcd: DssDeployment, keeper: CageKeeper, guy_address: Address, our_address: Address):
-        wipe_debt(mcd, mcd.collaterals['ETH-A'], guy_address)
-        wipe_debt(mcd, mcd.collaterals['ETH-A'], our_address)
+        wipe_debt(mcd, mcd.collaterals['ETH-A'], our_address) # Need to wipe debt from residual state of system on testchain
 
         open_underwater_urn(mcd, mcd.collaterals['ETH-A'], guy_address)
         open_cdp(mcd, mcd.collaterals['ETH-C'], our_address)
