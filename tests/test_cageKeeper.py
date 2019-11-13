@@ -124,6 +124,7 @@ def create_flap_auction(mcd: DssDeployment, deployment_address: Address, our_add
     assert mcd.mkr.balance_of(our_address) > bid
     assert flapper.tend(flapper.kicks(), mcd.vow.bump(), bid).transact(from_address=our_address)
 
+
 def create_flop_auction(mcd: DssDeployment, deployment_address: Address, our_address: Address):
     assert isinstance(mcd, DssDeployment)
     assert isinstance(deployment_address, Address)
@@ -157,6 +158,7 @@ def create_flop_auction(mcd: DssDeployment, deployment_address: Address, our_add
 
 
 def dent(flopper: Flopper, id: int, address: Address, lot: Wad, bid: Rad):
+    assert (isinstance(flopper, Flopper))
     assert (isinstance(id, int))
     assert (isinstance(lot, Wad))
     assert (isinstance(bid, Rad))
@@ -264,8 +266,6 @@ def fire_esm(mcd: DssDeployment):
     assert not mcd.end.live()
 
 
-
-
 def time_travel_by(web3: Web3, seconds: int):
     assert(isinstance(web3, Web3))
     assert(isinstance(seconds, int))
@@ -281,65 +281,12 @@ def time_travel_by(web3: Web3, seconds: int):
         web3.manager.request_blocking("evm_mine", [])
 
 
-def init_state_check(mcd: DssDeployment, cage_keeper: CageKeeper):
-    # Check if cage(ilk) have not been called
-    deploymentIlks = [mcd.collaterals[key].ilk for key in mcd.collaterals.keys()]
-    for i in deploymentIlks:
-        ilk = mcd.vat.ilk(i.name)
-        print("")
-        print(f"Name: {ilk.name}")
-        print(f"Rate: {ilk.rate}")
-        print(f"Ink: {ilk.ink}")
-        print(f"Art: {ilk.art}")
-        print(f"Spot: {ilk.spot}")
-        print(f"line: {ilk.line}")
-        print(f"dust: {ilk.dust}")
-        assert mcd.end.tag(ilk) == Ray(0)
-
-    # Check if any underwater urns are present
-    urns = cage_keeper.get_underwater_urns()
-    assert urns[0].art >= Wad.from_number(100)
-    assert urns[0].ilk.spot == Wad.from_number(1)
-    assert len(urns) == 1
-    print(f"Underwater urns: {len(urns)}")
-
-
-    auctions = cage_keeper.all_active_auctions()
-    assert "flips" in auctions
-    assert "flaps" in auctions
-    assert "flops" in auctions
-
-    i = 0
-    for key in auctions["flips"].keys():
-        for auction in auctions["flips"][key]:
-            assert mcd.flipper.bids(auction.id).lot != 0
-            i = i + 1
-
-        print(f"flips for {key}: {i} ")
-        i = 0
-
-    for auction in auctions["flaps"]:
-        assert mcd.flopper.bids(auction.id).lot != 0
-        i = i + 1
-    print(f"flaps: {i}")
-    i = 0
-
-    for auction in auctions["flops"]:
-        assert mcd.flopper.bids(auction.id).lot != 0
-        i = i + 1
-    print(f"flops: {i}")
-
-    return urns, auctions
-
-
 def print_out(testName: str):
     print("")
     print(f"{testName}")
     print("")
 
 
-# def args(arguments: str) -> list:
-#     return arguments.split()
 pytest.global_urns = []
 pytest.global_auctions = {}
 
@@ -400,6 +347,8 @@ class TestCageKeeper:
 
         create_flap_auction(mcd, deployment_address, our_address)
         create_flop_auction(mcd, deployment_address, other_address)
+        # this flip auction sets the collateral back to a price that makes the guy's vault underwater again.
+        # 49 to make it underwater, and create_flip_auction sets it to 33
         create_flip_auction(mcd, deployment_address, our_address)
 
         auctions = keeper.all_active_auctions()
@@ -432,7 +381,7 @@ class TestCageKeeper:
 
         pytest.global_auctions = auctions
 
-    # @pytest.mark.skip(reason="possibly incomplete")
+    # @pytest.mark.skip(reason="done")
     def test_check_cage(self, mcd: DssDeployment, keeper: CageKeeper, our_address: Address, other_address: Address):
         print_out("test_check_cage")
         keeper.check_cage()
@@ -485,8 +434,8 @@ class TestCageKeeper:
         for auction in auctions["flaps"]:
             assert mcd.flapper.bids(auction.id).lot == Rad(0)
 
-        for auction in auctions["flops"]:
-            assert mcd.flopper.bids(auction.id).lot == Rad(0)
+        # for auction in auctions["flops"]:
+        #     assert mcd.flopper.bids(auction.id).lot == Rad(0)
 
         # Cage has been thawed (thaw() called)
-        assert mcd.vat.end.debt() != Rad(0)
+        assert mcd.end.debt() != Rad(0)
