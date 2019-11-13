@@ -114,11 +114,11 @@ class CageKeeper:
 
         with Lifecycle(self.web3) as lifecycle:
             self.lifecycle = lifecycle
-            lifecycle.on_startup(self.checkDeployment)
+            lifecycle.on_startup(self.check_deployment)
             lifecycle.on_block(self.process_block)
 
 
-    def checkDeployment(self):
+    def check_deployment(self):
         self.logger.info('')
         self.logger.info('Please confirm the deployment details')
         self.logger.info(f'Keeper Balance: {self.web3.eth.getBalance(self.our_address.address) / (10**18)} ETH')
@@ -147,11 +147,14 @@ class CageKeeper:
 
         live = self.dss.end.live()
 
-        if not live and (self.confirmations == 1):
+        # Ensure 12 blocks confirmations have passed before facilitating cage
+        if not live and (self.confirmations == 12):
             self.logger.info('======== System has been caged (12 confirmations) ========')
             self.cage_facilitated = True
             self.facilitate_cage()
-            self.lifecycle.terminate()
+            if not (self.arguments.network == 'testnet'):
+                self.lifecycle.terminate()
+
         elif not live and self.confirmations < 12:
             self.logger.info(f'======== System has been caged ( {self.confirmations} confirmations) ========')
             self.confirmations = self.confirmations + 1
