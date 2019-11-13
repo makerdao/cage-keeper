@@ -25,7 +25,7 @@ Make a run-cage-keeper.sh to easily spin up the cage-keeper.
 #!/bin/bash
 /full/path/to/cage-keeper/bin/cage-keeper \
 	--rpc-host 'kovan.SampleParityNode.com' \
-  --network 'kovan' \
+  	--network 'kovan' \
 	--eth-from '0xABCKovanAddress' \
 	--eth-key 'key_file=/full/path/to/keystoreFile.json,pass_file=/full/path/to/passphrase/file.txt' \
 	--vat-deployment-block 14374534
@@ -35,9 +35,7 @@ Make a run-cage-keeper.sh to easily spin up the cage-keeper.
 ## Testing
 
 Prerequisites:
-* [docker and docker-compose](https://www.docker.com/get-started)
-* [ganache-cli](https://github.com/trufflesuite/ganache-cli) 6.2.5  
-  (using npm, `sudo npm install -g ganache-cli@6.2.5`)
+* Download [docker and docker-compose](https://www.docker.com/get-started)
 
 This project uses [pytest](https://docs.pytest.org/en/latest/) for unit testing.  Testing of Multi-collateral Dai is
 performed on a Dockerized local testchain included in `tests\config`.
