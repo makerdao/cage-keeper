@@ -340,7 +340,8 @@ def print_out(testName: str):
 
 # def args(arguments: str) -> list:
 #     return arguments.split()
-
+pytest.global_urns = []
+pytest.global_auctions = {}
 
 class TestCageKeeper:
 
@@ -374,19 +375,21 @@ class TestCageKeeper:
     # @pytest.mark.skip(reason="done")
     def test_get_underwater_urns(self, mcd: DssDeployment, keeper: CageKeeper, guy_address: Address, our_address: Address):
         print_out("test_get_underwater_urns")
-        # wipe_debt(mcd, mcd.collaterals['ETH-A'], our_address) # Need to wipe debt from residual state of system on testchain
 
         previous_eth_price = open_underwater_urn(mcd, mcd.collaterals['ETH-A'], guy_address)
         open_cdp(mcd, mcd.collaterals['ETH-C'], our_address)
 
 
-        self.urns = keeper.get_underwater_urns()
-        assert type(self.urns) is list
-        assert all(isinstance(x, Urn) for x in self.urns)
-        assert len(self.urns) == 1
-        assert self.urns[0].address.address == guy_address.address
+        urns = keeper.get_underwater_urns()
+        assert type(urns) is list
+        assert all(isinstance(x, Urn) for x in urns)
+        assert len(urns) == 1
+        assert urns[0].address.address == guy_address.address
 
         set_collateral_price(mcd, mcd.collaterals['ETH-A'], Wad(previous_eth_price))
+
+        pytest.global_urns = urns
+
 
 
     # @pytest.mark.skip(reason="done")
@@ -399,33 +402,35 @@ class TestCageKeeper:
         create_flop_auction(mcd, deployment_address, other_address)
         create_flip_auction(mcd, deployment_address, our_address)
 
-        self.auctions = keeper.all_active_auctions()
-        assert "flips" in self.auctions
-        assert "flops" in self.auctions
-        assert "flaps" in self.auctions
+        auctions = keeper.all_active_auctions()
+        assert "flips" in auctions
+        assert "flops" in auctions
+        assert "flaps" in auctions
 
         nobody = Address("0x0000000000000000000000000000000000000000")
 
         # All auctions active before cage have been yanked
-        for ilk in self.auctions["flips"].keys():
-            for auction in self.auctions["flips"][ilk]:
-                assert len(self.auctions["flips"][ilk]) == 1
+        for ilk in auctions["flips"].keys():
+            for auction in auctions["flips"][ilk]:
+                assert len(auctions["flips"][ilk]) == 1
                 assert auction.id > 0
                 assert auction.bid < auction.tab
                 assert auction.guy != nobody
                 assert auction.guy == our_address
 
-        assert len(self.auctions["flaps"]) == 1
-        for auction in self.auctions["flaps"]:
+        assert len(auctions["flaps"]) == 1
+        for auction in auctions["flaps"]:
             assert auction.id > 0
             assert auction.guy != nobody
             assert auction.guy == our_address
 
-        assert len(self.auctions["flops"]) == 1
-        for auction in self.auctions["flops"]:
+        assert len(auctions["flops"]) == 1
+        for auction in auctions["flops"]:
             assert auction.id > 0
             assert auction.guy != nobody
             assert auction.guy == other_address
+
+        pytest.global_auctions = auctions
 
     # @pytest.mark.skip(reason="possibly incomplete")
     def test_check_cage(self, mcd: DssDeployment, keeper: CageKeeper, our_address: Address, other_address: Address):
@@ -453,9 +458,14 @@ class TestCageKeeper:
 
     # @pytest.mark.skip(reason="possibly incomplete")
     def test_cage_keeper(self, mcd: DssDeployment, keeper: CageKeeper, our_address: Address, other_address: Address):
-
+        print_out("test_cage_keeper")
         frobbedIlks = keeper.get_ilks()
-        for ilk in deploymentIlks:
+        urns = pytest.global_urns
+        auctions = pytest.global_auctions
+        print(urns)
+        print(auctions)
+
+        for ilk in frobbedIlks:
             # Check if cage(ilk) called on all ilks
             assert mcd.end.tag(ilk) > Ray(0)
 
@@ -463,20 +473,20 @@ class TestCageKeeper:
             assert mcd.end.fix(ilk) > Ray(0)
 
         # All underwater urns present before ES have been skimmed
-        for i in self.urns:
+        for i in urns:
             urn = mcd.vat.urn(i.ilk, i.address)
             assert urn.art == Wad(0)
 
         # All auctions active before cage have been yanked
-        for ilk in self.auctions["flips"].keys():
-            for auction in self.auctions["flips"][ilk]:
-                assert mcd.flipper.bids(auction.id).lot == 0
+        for ilk in auctions["flips"].keys():
+            for auction in auctions["flips"][ilk]:
+                assert mcd.collaterals[ilk].flipper.bids(auction.id).lot == Wad(0)
 
-        for auction in self.auctions["flaps"]:
-            assert mcd.flopper.bids(auction.id).lot == 0
+        for auction in auctions["flaps"]:
+            assert mcd.flapper.bids(auction.id).lot == Rad(0)
 
-        for auction in self.auctions["flops"]:
-            assert mcd.flopper.bids(auction.id).lot == 0
+        for auction in auctions["flops"]:
+            assert mcd.flopper.bids(auction.id).lot == Rad(0)
 
         # Cage has been thawed (thaw() called)
         assert mcd.vat.end.debt() != Rad(0)
