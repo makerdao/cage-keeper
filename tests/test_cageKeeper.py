@@ -1,6 +1,6 @@
 # This file is part of Maker Keeper Framework.
 #
-# Copyright (C) 2019 EdNoepel, kentonprescott
+# Copyright (C) 2019 KentonPrescott
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -18,7 +18,7 @@
 
 import pytest
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import time
 from typing import List
 import logging
@@ -381,11 +381,12 @@ class TestCageKeeper:
 
         pytest.global_auctions = auctions
 
+
     # @pytest.mark.skip(reason="done")
     def test_check_cage(self, mcd: DssDeployment, keeper: CageKeeper, our_address: Address, other_address: Address):
         print_out("test_check_cage")
         keeper.check_cage()
-        assert keeper.cage_facilitated == False
+        assert keeper.cageFacilitated == False
         assert mcd.end.live() == 1
         prepare_esm(mcd, our_address)
         fire_esm(mcd)
@@ -395,14 +396,20 @@ class TestCageKeeper:
             keeper.check_cage()
         assert keeper.confirmations == 12
 
-        #debugging for flopper.yank()
-        assert mcd.flopper.kicks() == 1
-        bids = mcd.flopper.bids(1)
-        assert mcd.end.live() != 1
-        assert bids.guy == other_address
+        keeper.check_cage() # Facilitate processing period
+        assert keeper.cageFacilitated == True
 
-        keeper.check_cage()
-        assert keeper.cage_facilitated == True
+        when = mcd.end.when()
+        wait = mcd.end.wait()
+        whenInUnix = when.replace(tzinfo=timezone.utc).timestamp()
+        blockNumber = mcd.web3.eth.blockNumber
+        now = mcd.web3.eth.getBlock(blockNumber).timestamp
+        thawedCage = whenInUnix + wait
+        assert now >= thawedCage
+
+        time_travel_by(mcd.web3, 1)
+
+        keeper.check_cage() # Facilitate cooldown (thawing cage)
 
 
     # @pytest.mark.skip(reason="possibly incomplete")
@@ -411,8 +418,6 @@ class TestCageKeeper:
         frobbedIlks = keeper.get_ilks()
         urns = pytest.global_urns
         auctions = pytest.global_auctions
-        print(urns)
-        print(auctions)
 
         for ilk in frobbedIlks:
             # Check if cage(ilk) called on all ilks
@@ -434,6 +439,7 @@ class TestCageKeeper:
         for auction in auctions["flaps"]:
             assert mcd.flapper.bids(auction.id).lot == Rad(0)
 
+        # TODO: uncomment when Flop.yank is sorted
         # for auction in auctions["flops"]:
         #     assert mcd.flopper.bids(auction.id).lot == Rad(0)
 

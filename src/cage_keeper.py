@@ -1,6 +1,6 @@
 # This file is part of the Maker Keeper Framework.
 #
-# Copyright (C) 2018-2019 reverendus, kentonprescott
+# Copyright (C) 2019 KentonPrescott
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -19,6 +19,7 @@ import argparse
 import logging
 import sys
 import time
+from datetime import datetime, timezone
 import types
 from os import path
 from typing import List
@@ -59,6 +60,9 @@ class CageKeeper:
         parser.add_argument("--network", type=str, required=True,
                             help="Network that you're running the Keeper on (options, 'mainnet', 'kovan', 'testnet')")
 
+        parser.add_argument("--previous-cage", type=bool, required=False,
+                            help="Have this keeper previously helped to facilitate the processing phase of ES? (e.g. True, False)")
+
         parser.add_argument("--eth-from", type=str, required=True,
                             help="Ethereum address from which to send transactions; checksummed (e.g. '0x12AebC')")
 
@@ -95,7 +99,9 @@ class CageKeeper:
         self.max_errors = self.arguments.max_errors
         self.errors = 0
 
-        self.cage_facilitated = False
+        self.cageFacilitated = self.arguments.previous_cage \
+            if self.arguments.previous_cage is not None else False
+
         self.confirmations = 0
 
 
@@ -143,32 +149,47 @@ class CageKeeper:
 
 
     def check_cage(self):
-        self.logger.info(f'Checking Cage on block {self.web3.eth.blockNumber}')
+        blockNumber = self.web3.eth.blockNumber
+        self.logger.info(f'Checking Cage on block {blockNumber}')
 
         live = self.dss.end.live()
 
         # Ensure 12 blocks confirmations have passed before facilitating cage
         if not live and (self.confirmations == 12):
-            self.logger.info('======== System has been caged (12 confirmations) ========')
-            self.cage_facilitated = True
-            self.facilitate_cage()
-            if not (self.arguments.network == 'testnet'):
-                self.lifecycle.terminate()
+            self.logger.info('======== System has been caged ========')
 
-        elif not live and self.confirmations < 12:
-            self.logger.info(f'======== System has been caged ( {self.confirmations} confirmations) ========')
+            when = self.dss.end.when()
+            wait = self.dss.end.wait()
+            whenInUnix = when.replace(tzinfo=timezone.utc).timestamp()
+            now = self.web3.eth.getBlock(blockNumber).timestamp
+            thawedCage = whenInUnix + wait
+
+            if not self.cageFacilitated:
+                self.cageFacilitated = True
+                self.facilitate_processing_period()
+
+            elif (now >= thawedCage): # wait until processing time concludes
+                self.thaw_cage()
+
+                if not (self.arguments.network == 'testnet'):
+                    self.lifecycle.terminate()
+
+            else:
+                whenThawedCage = datetime.utcfromtimestamp(thawedCage)
+                self.logger.info('')
+                self.logger.info(f'Cage has been processed and will be thawed on {whenThawedCage.strftime("%m/%d/%Y, %H:%M:%S")} UTC')
+                self.logger.info('')
+
+        elif not live and self.confirmations < 13:
             self.confirmations = self.confirmations + 1
+            self.logger.info(f'======== System has been caged ( {self.confirmations} confirmations) ========')
 
 
 
-
-    def facilitate_cage(self):
+    def facilitate_processing_period(self):
         self.logger.info('')
         self.logger.info('======== Facilitating Cage ========')
         self.logger.info('')
-
-        # Get End.wait in seconds (processing time)
-        wait = self.dss.end.wait()
 
         # check ilks
         ilks = self.check_ilks()
@@ -196,9 +217,12 @@ class CageKeeper:
         for i in urns:
             self.dss.end.skim(i.ilk, i.address).transact(gas_price=self.gas_price())
 
-        # wait until processing time concludes
-        print(wait)
-        time.sleep(wait)
+    def thaw_cage(self):
+        self.logger.info('')
+        self.logger.info('======== Thawing Cage ========')
+        self.logger.info('')
+
+        ilks = self.check_ilks()
 
         # check if Dai is in Vow and annialate it with Heal()
         dai = self.dss.vat.dai(self.dss.vow.address)
@@ -211,7 +235,6 @@ class CageKeeper:
         # Set fix (collateral/Dai ratio) for all Ilks
         for ilk in ilks:
             self.dss.end.flow(ilk).transact(gas_price=self.gas_price())
-
 
 
 
@@ -313,8 +336,6 @@ class CageKeeper:
 
         for bid in flopBids:
             self.dss.flopper.yank(bid.id).transact(gas_price=self.gas_price())
-
-
 
     def gas_price(self):
         """  DefaultGasPrice """
