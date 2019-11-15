@@ -1,6 +1,6 @@
 # This file is part of the Maker Keeper Framework.
 #
-# Copyright (C) 2019 KentonPrescott
+# Copyright (C) 2019 EdNoepel, KentonPrescott
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -33,7 +33,7 @@ from pymaker.gas import DefaultGasPrice, FixedGasPrice
 from pymaker.auctions import Flipper, Flapper, Flopper
 from pymaker.keys import register_keys
 from pymaker.lifecycle import Lifecycle
-from pymaker.numeric import Wad, Rad
+from pymaker.numeric import Wad, Rad, Ray
 from pymaker.token import ERC20Token
 from pymaker.deployment import DssDeployment
 from pymaker.dss import Ilk, Urn
@@ -280,7 +280,11 @@ class CageKeeper:
         for ilk in urns.keys():
             for urn in urns[ilk].keys():
                 urns[ilk][urn].ilk = self.dss.vat.ilk(urns[ilk][urn].ilk.name)
-                if urns[ilk][urn].art * urns[ilk][urn].ilk.rate > urns[ilk][urn].ink * urns[ilk][urn].ilk.spot:
+                mat = self.dss.spotter.mat(urns[ilk][urn].ilk)
+                usdDebt = Ray(urns[ilk][urn].art) * urns[ilk][urn].ilk.rate
+                usdCollateral = Ray(urns[ilk][urn].ink) * urns[ilk][urn].ilk.spot * mat
+
+                if usdDebt > usdCollateral:
                     underwater_urns.append(urns[ilk][urn])
 
         return underwater_urns

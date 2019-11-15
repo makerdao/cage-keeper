@@ -64,12 +64,13 @@ def wipe_debt(mcd: DssDeployment, collateral: Collateral, address: Address):
 def open_underwater_urn(mcd: DssDeployment, collateral: Collateral, address: Address):
     open_cdp(mcd, collateral, address, 50)
     previous_eth_price = mcd.vat.ilk(collateral.ilk.name).spot
-    print(f"PREV ETH PRICE {previous_eth_price}") # this is 76.66
+    print(f"PREV ETH PRICE {previous_eth_price}")
     set_collateral_price(mcd, collateral, Wad.from_number(49))
 
     urn = mcd.vat.urn(collateral.ilk, address)
     ilk = mcd.vat.ilk(collateral.ilk.name)
-    assert (urn.art * ilk.rate) > (urn.ink * ilk.spot)
+    mat = mcd.spotter.mat(ilk)
+    assert (urn.art * ilk.rate) > (urn.ink * ilk.spot * mat)
 
     return previous_eth_price
 
