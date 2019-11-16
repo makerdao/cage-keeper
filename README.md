@@ -5,7 +5,7 @@ The Cage Keeper is used to help facilitate [Emergency Shutdown](https://blog.mak
 2. Processing Period - Next, Vault owners interact with End to settle their Vault and withdraw excess collateral. Auctions are left to conclude or are yanked before settlement.
 3. Dai Redemption  - After the processing period duration `End.wait` has elapsed, Vault settlement and all Dai generating processes (auctions) are assumed to have concluded. At this point, Dai holders can begin to claim a proportional amount of each collateral type at a fixed rate.
 
-To prevent a race-condition for Dai holders during Step 3, it's imperative that any Vaults having a collateralization ratio of less than 100% at Step 1 must be processed during Step 2. The owner of these underwater vaults would not receive excess collateral, so they lack an incentive to `skim` their position in the `End` contract. Thus, it is the responsibility of a MakerDao Stakeholder (MKR holders, large Dai holders, etc) to ensure the system facilitates a Dai redemption phase without a time variable.
+To prevent a race-condition for Dai holders during Step 3, it's imperative that any Vaults having a collateralization ratio of less than 100% at Step 1 must be processed during Step 2. The owner of these underwater vaults would not receive excess collateral, so they lack an incentive to `skim` their position in the `End` contract. Thus, it is the responsibility of a MakerDao Stakeholder (MKR holders, large Dai holders, etc) to ensure the system facilitates a Dai redemption phase without a time variable. The Cage-Keeper is a tool to help stakeholders carry out this responsibility.
 
 To be consistent with the Protocol's technical terminology for the rest of this description:
 * `urn` = Vault
@@ -17,7 +17,9 @@ To be consistent with the Protocol's technical terminology for the rest of this 
   <img src="operation.png">
 </p>
 
-The largest responsibility of the Cage-Keeper is the processing of under-collateralized `urns`. This accounting step is performed within `End.skim()`, and since it is surrounded by other required/important steps in the Emergency Shutdown, a first iteration of Cage Keeper will help to call most of the other public function calls within the `End` contract. As can be seen in the flowchart, the keepers operation checks if the system has been caged before attempting to `skim` all underwater urns and `skip` all flip auctions. After the processing period has been facilitated and the `End.wait` waittime has been reached, it will call transition the system into the Dai redemption phase of Emergency Shutdown by calling `End.thaw()` and `End.flow()`. This first iteration of this keeper is naive, as it assumes it's the only keeper and attempts to account for all urns, ilks, and auctions. Because of this, it's important that the Cage Keeper's address has enough ETH to cover the gas costs involved with sending numerous transactions. 
+The central goal of the Cage-Keeper is to process all under-collateralized `urns`. This accounting step is performed within `End.skim()`, and since it is surrounded by other required/important steps in the Emergency Shutdown, a first iteration of Cage Keeper will help to call most of the other public function calls within the `End` contract.
+
+As can be seen in the above flowchart, the keeper checks if the system has been caged before attempting to `skim` all underwater urns and `skip` all flip auctions. After the processing period has been facilitated and the `End.wait` waittime has been reached, it will transition the system into the Dai redemption phase of Emergency Shutdown by calling `End.thaw()` and `End.flow()`. This first iteration of this keeper is naive, as it assumes it's the only keeper and attempts to account for all urns, ilks, and auctions. Because of this, it's important that the Cage Keeper's address has enough ETH to cover the gas costs involved with sending numerous transactions. Any transaction that attempts to call a function that's already been invoked by another Keeper/user would simply fail.
 
 
 
@@ -45,6 +47,7 @@ Make a run-cage-keeper.sh to easily spin up the cage-keeper.
 /full/path/to/cage-keeper/bin/cage-keeper \
 	--rpc-host 'kovan.SampleParityNode.com' \
   	--network 'kovan' \
+	--previous-cage 'False' \
 	--eth-from '0xABCKovanAddress' \
 	--eth-key 'key_file=/full/path/to/keystoreFile.json,pass_file=/full/path/to/passphrase/file.txt' \
 	--vat-deployment-block 14374534
