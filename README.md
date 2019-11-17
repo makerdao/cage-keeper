@@ -71,3 +71,8 @@ You can then run all tests with:
 ```
 ./test.sh
 ```
+
+## Roadmap
+- [ ]  Dynamic gas pricing strategy
+- [ ]  Interactive startup (ask if cage has already been facilitated by the keeper)
+- [ ]  Call `Vow.heal()` and `End.thaw()` atomically
