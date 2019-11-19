@@ -149,6 +149,7 @@ class CageKeeper:
 
 
     def check_cage(self):
+        """ After live is 0 for 12 block confirmations, facilitate the processing period, then thaw the cage """
         blockNumber = self.web3.eth.blockNumber
         self.logger.info(f'Checking Cage on block {blockNumber}')
 
@@ -168,7 +169,8 @@ class CageKeeper:
                 self.cageFacilitated = True
                 self.facilitate_processing_period()
 
-            elif (now >= thawedCage): # wait until processing time concludes
+            # wait until processing time concludes
+            elif (now >= thawedCage):
                 self.thaw_cage()
 
                 if not (self.arguments.network == 'testnet'):
@@ -187,6 +189,7 @@ class CageKeeper:
 
 
     def facilitate_processing_period(self):
+        """ Yank all active flap/flop auctions, cage all ilks, skip all flip auctions, skim all underwater urns  """
         self.logger.info('')
         self.logger.info('======== Facilitating Cage ========')
         self.logger.info('')
@@ -217,7 +220,9 @@ class CageKeeper:
         for i in urns:
             self.dss.end.skim(i.ilk, i.address).transact(gas_price=self.gas_price())
 
+
     def thaw_cage(self):
+        """ Once End.wait is reached, annihilate any lingering Dai in the vow, thaw the cage, and set the fix for all ilks  """
         self.logger.info('')
         self.logger.info('======== Thawing Cage ========')
         self.logger.info('')
@@ -252,7 +257,7 @@ class CageKeeper:
 
 
     def check_ilks(self) -> List[Ilk]:
-
+        """ Check if there's a discrepancy in the ilks included in pymaker's deployment file and those that have ever been frobbed"""
         ilks = self.get_ilks()
         ilkNames = [i.name for i in ilks]
 
@@ -260,10 +265,10 @@ class CageKeeper:
         deploymentIlkNames = [i.name for i in deploymentIlks]
 
         if set(ilkNames) != set(deploymentIlkNames):
-            self.logger.info('======== NOTE, Discrepancy in frobbed ilks and collaterals in deployment file ========')
+            self.logger.info('==== NOTE, Discrepancy in frobbed ilks and collaterals in deployment file ====')
             self.logger.info(f'Frobbed ilks: {ilkNames}')
             self.logger.info(f'Deployment ilks: {deploymentIlkNames}')
-            self.logger.info('=========================== Will continue with deployment ilks ==========================')
+            self.logger.info('====================== Will continue with deployment ilks ====================')
             self.logger.info('')
 
         return deploymentIlks
@@ -271,10 +276,10 @@ class CageKeeper:
 
 
     def get_underwater_urns(self) -> List[Urn]:
-
+        """ With all urns every frobbed, compile and return a list urns that are under-collateralized up to 100%  """
         urns = self.dss.vat.urns(from_block=self.deployment_block)
 
-        # Check if underwater, or  urn.art * ilk.rate > urn.ink * ilk.spot
+        # Check if underwater ->  urn.art * ilk.rate > urn.ink * ilk.spot * spotter.mat[ilk]
         underwater_urns = []
 
         for ilk in urns.keys():
@@ -294,7 +299,6 @@ class CageKeeper:
 
     def all_active_auctions(self) -> dict:
         """ Aggregates active auctions that meet criteria to be called after Cage """
-
         flips = {}
         for collateral in self.dss.collaterals.values():
             # Each collateral has it's own flip contract; add auctions from each.
@@ -340,6 +344,7 @@ class CageKeeper:
 
         for bid in flopBids:
             self.dss.flopper.yank(bid.id).transact(gas_price=self.gas_price())
+
 
     def gas_price(self):
         """  DefaultGasPrice """
