@@ -1,6 +1,3 @@
 [submodule "lib/pymaker"]
 	path = lib/pymaker
 	url = https://github.com/makerdao/pymaker.git
-[submodule "lib/auction-keeper"]
-	path = lib/auction-keeper
-	url = https://github.com/makerdao/auction-keeper.git
