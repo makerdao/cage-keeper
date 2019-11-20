@@ -13,9 +13,7 @@ To be consistent with the Protocol's technical terminology for the rest of this 
 
 ## Architecture
 
-<p align="center">
-  <img src="operation.png">
-</p>
+![alt text](operation.png)
 
 `cage-keeper` directly interacts with the `End`, `Flopper` and `Flapper` contracts.
 
@@ -26,10 +24,10 @@ As can be seen in the above flowchart, the keeper checks if the system has been 
 
 ## Operation
 
-This keeper can either run continuously on a local/virtual machine or be run when the operator becomes aware of Emergency Shutdown. A sample startup script is shown below. The keeper's ethereum address should have enough ETH to cover gas costs and is a function of the protocol's state at the time of shutdown (i.e. more urns to `skim` means more required ETH to cover gas costs). 
-When new collateral types are added to the protocol, the operator should pull the latest version of the keeper, which would include contracts associated with the aforementioned collateral types. 
+This keeper can either run continuously on a local/virtual machine or be run when the operator becomes aware of Emergency Shutdown. A sample startup script is shown below. The keeper's ethereum address should have enough ETH to cover gas costs and is a function of the protocol's state at the time of shutdown (i.e. more urns to `skim` means more required ETH to cover gas costs).
+When new collateral types are added to the protocol, the operator should pull the latest version of the keeper, which would include contracts associated with the aforementioned collateral types.
 
-After the `cage-keeper` facilitates the processing period, it can be turned off until `End.wait` is nearly reached. Then, at that point, the operator would pass in the `--previous-cage 'True'` argument during keeper start in order to bypass the feature that supports the processing period. 
+After the `cage-keeper` facilitates the processing period, it can be turned off until `End.wait` is nearly reached. Then, at that point, the operator would pass in the `--previous-cage` argument during keeper start in order to bypass the feature that supports the processing period.
 
 ### Installation
 
@@ -54,8 +52,7 @@ Make a run-cage-keeper.sh to easily spin up the cage-keeper.
 #!/bin/bash
 /full/path/to/cage-keeper/bin/cage-keeper \
 	--rpc-host 'sample.ParityNode.com' \
-  	--network 'kovan' \
-	--previous-cage 'False' \
+  --network 'kovan' \
 	--eth-from '0xABCAddress' \
 	--eth-key 'key_file=/full/path/to/keystoreFile.json,pass_file=/full/path/to/passphrase/file.txt' \
 	--vat-deployment-block 14374534

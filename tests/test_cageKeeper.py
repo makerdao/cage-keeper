@@ -302,8 +302,7 @@ class TestCageKeeper:
         print_out("test_get_ilks")
 
         print(f"Dai: {mcd.vat.dai(mcd.vow.address)}")
-        print(f"Sin: Hello {mcd.vat.sin(mcd.vow.address)}")
-        print(f"Dai: {mcd.vat.dai(mcd.vow.address)}")
+        print(f"Sin: {mcd.vat.sin(mcd.vow.address)}")
         ilks = keeper.get_ilks()
         assert type(ilks) is list
         assert all(isinstance(x, Ilk) for x in ilks)

@@ -60,8 +60,8 @@ class CageKeeper:
         parser.add_argument("--network", type=str, required=True,
                             help="Network that you're running the Keeper on (options, 'mainnet', 'kovan', 'testnet')")
 
-        parser.add_argument("--previous-cage", type=bool, required=False,
-                            help="Have this keeper previously helped to facilitate the processing phase of ES? (e.g. True, False)")
+        parser.add_argument('--previous-cage', dest='cageFacilitated', action='store_true',
+                            help='Include this argument if this keeper previously helped to facilitate the processing phase of ES')
 
         parser.add_argument("--eth-from", type=str, required=True,
                             help="Ethereum address from which to send transactions; checksummed (e.g. '0x12AebC')")
@@ -81,6 +81,7 @@ class CageKeeper:
         parser.add_argument("--debug", dest='debug', action='store_true',
                             help="Enable debug output")
 
+        parser.set_defaults(cageFacilitated=False)
         self.arguments = parser.parse_args(args)
 
         self.web3 = kwargs['web3'] if 'web3' in kwargs else Web3(HTTPProvider(endpoint_uri=f"https://{self.arguments.rpc_host}:{self.arguments.rpc_port}",
@@ -99,8 +100,7 @@ class CageKeeper:
         self.max_errors = self.arguments.max_errors
         self.errors = 0
 
-        self.cageFacilitated = self.arguments.previous_cage \
-            if self.arguments.previous_cage is not None else False
+        self.cageFacilitated = self.arguments.cageFacilitated
 
         self.confirmations = 0
 
