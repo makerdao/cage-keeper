@@ -439,7 +439,6 @@ class TestCageKeeper:
         for auction in auctions["flaps"]:
             assert mcd.flapper.bids(auction.id).lot == Rad(0)
 
-        # TODO: uncomment when Flop.yank() revert is fixed
         # for auction in auctions["flops"]:
         #     assert mcd.flopper.bids(auction.id).lot == Rad(0)
 
