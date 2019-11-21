@@ -7,6 +7,9 @@ The `cage-keeper` is used to help facilitate [Emergency Shutdown](https://blog.m
 
 To prevent a race-condition for Dai holders during Step 3, it's imperative that any Vaults having a collateralization ratio of less than 100% at Step 1 must be processed during Step 2. The owner of an underwater Vault would not receive excess collateral, so they lack an incentive to `skim` their position in the `End` contract. Thus, it is the responsibility of a MakerDao Stakeholder (MKR holders, large Dai holders, etc) to ensure the system facilitates a Dai redemption phase without a time variable. The `cage-keeper` is a tool to help stakeholders carry out this responsibility.
 
+### Prerequisites
+The following section assumes familiarity with Emergency Shutdown. Good places to start is the Emergency Shutdown Module in Section 3 and Section 4 of the [Maker Protocol 101](https://docs.makerdao.com/maker-protocol-101) as well as a more thorough, [technical description](https://docs.makerdao.com/smart-contract-modules/shutdown). Functions mentioned are from the implementation contained by the `End` contract, which is [located here](https://github.com/makerdao/dss/blob/master/src/end.sol).
+
 To be consistent with the Protocol's technical terminology for the rest of this description:
 * `urn` = Vault
 * `ilk` = Collateral Type
@@ -52,7 +55,7 @@ Make a run-cage-keeper.sh to easily spin up the cage-keeper.
 #!/bin/bash
 /full/path/to/cage-keeper/bin/cage-keeper \
 	--rpc-host 'sample.ParityNode.com' \
-  --network 'kovan' \
+	--network 'kovan' \
 	--eth-from '0xABCAddress' \
 	--eth-key 'key_file=/full/path/to/keystoreFile.json,pass_file=/full/path/to/passphrase/file.txt' \
 	--vat-deployment-block 14374534
@@ -78,6 +81,7 @@ You can then run all tests with:
 ```
 
 ## Roadmap
-- [ ]  Dynamic gas pricing strategy
+- [ ]  [Dynamic gas pricing strategy](https://github.com/makerdao/market-maker-keeper/blob/master/market_maker_keeper/gas.py)
 - [ ]  Interactive startup (ask if cage has already been facilitated by the keeper)
 - [ ]  Call `Vow.heal()` and `End.thaw()` atomically
+- [ ]  Gas optimization (check to see if function has been called already, etc)
