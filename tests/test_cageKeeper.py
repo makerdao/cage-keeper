@@ -439,8 +439,8 @@ class TestCageKeeper:
         for auction in auctions["flaps"]:
             assert mcd.flapper.bids(auction.id).lot == Rad(0)
 
-        # for auction in auctions["flops"]:
-        #     assert mcd.flopper.bids(auction.id).lot == Rad(0)
+        for auction in auctions["flops"]:
+            assert mcd.flopper.bids(auction.id).lot == Wad(0)
 
         # Cage has been thawed (thaw() called)
         assert mcd.end.debt() != Rad(0)
