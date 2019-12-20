@@ -46,7 +46,7 @@ class CageKeeper:
     def __init__(self, args: list, **kwargs):
         """Pass in arguements assign necessary variables/objects and instantiate other Classes"""
 
-        parser = argparse.ArgumentParser("simple-arbitrage-keeper")
+        parser = argparse.ArgumentParser("cage-keeper")
 
         parser.add_argument("--rpc-host", type=str, default="localhost",
                             help="JSON-RPC host (default: `localhost')")
