@@ -10,7 +10,7 @@ The `cage-keeper` is used to help facilitate [Emergency Shutdown](https://blog.m
 
 To prevent a race-condition for Dai holders during Step 3, it's imperative that any Vaults having a collateralization ratio of less than 100% at Step 1 must be processed during Step 2. The owner of an underwater Vault would not receive excess collateral, so they lack an incentive to `skim` their position in the `End` contract. Thus, it is the responsibility of a MakerDao Stakeholder (MKR holders, large Dai holders, etc) to ensure the system facilitates a Dai redemption phase without a time variable. The `cage-keeper` is a tool to help stakeholders carry out this responsibility.
 
-### Prerequisites
+### Review
 The following section assumes familiarity with Emergency Shutdown. Good places to start is the Emergency Shutdown Module in Section 3 and Section 4 of the [Maker Protocol 101](https://docs.makerdao.com/maker-protocol-101) as well as a more thorough, [technical description](https://docs.makerdao.com/smart-contract-modules/shutdown). Functions mentioned are from the implementation contained by the `End` contract, which is [located here](https://github.com/makerdao/dss/blob/master/src/end.sol).
 
 To be consistent with the Protocol's technical terminology for the rest of this description:
@@ -36,8 +36,10 @@ When new collateral types are added to the protocol, the operator should pull th
 After the `cage-keeper` facilitates the processing period, it can be turned off until `End.wait` is nearly reached. Then, at that point, the operator would pass in the `--previous-cage` argument during keeper start in order to bypass the feature that supports the processing period.
 
 ### Installation
-
-This project uses *Python 3.6.2*.
+#### Prerequisites
+- [Python v3.6.6](https://www.python.org/downloads/release/python-366/)
+- [virtualenv](https://virtualenv.pypa.io/en/latest/)
+    - This project requires *virtualenv* to be installed if you want to use Maker's python tools. This helps with making sure that you are running the right version of python and checks that all of the pip packages that are installed in the **install.sh** are in the right place and have the right versions.
 
 In order to clone the project and install required third-party packages please execute:
 ```
