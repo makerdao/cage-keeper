@@ -24,9 +24,7 @@ import types
 from os import path
 from typing import List
 
-
 from web3 import Web3, HTTPProvider
-
 
 from pymaker import Address
 from pymaker.gas import DefaultGasPrice, FixedGasPrice
@@ -37,6 +35,9 @@ from pymaker.numeric import Wad, Rad, Ray
 from pymaker.token import ERC20Token
 from pymaker.deployment import DssDeployment
 from pymaker.dss import Ilk, Urn
+
+from auction_keeper.urn_history import UrnHistory
+from auction_keeper.gas import DynamicGasPrice
 
 class CageKeeper:
     """Keeper to facilitate Emergency Shutdown"""
@@ -54,7 +55,7 @@ class CageKeeper:
         parser.add_argument("--rpc-port", type=int, default=8545,
                             help="JSON-RPC port (default: `8545')")
 
-        parser.add_argument("--rpc-timeout", type=int, default=10,
+        parser.add_argument("--rpc-timeout", type=int, default=1200,
                             help="JSON-RPC timeout (in seconds, default: 10)")
 
         parser.add_argument("--network", type=str, required=True,
@@ -75,11 +76,17 @@ class CageKeeper:
         parser.add_argument("--vat-deployment-block", type=int, required=False, default=0,
                             help=" Block that the Vat from dss-deployment-file was deployed at (e.g. 8836668")
 
+        parser.add_argument("--vulcanize-endpoint", type=str,
+                            help="When specified, frob history will be queried from a VulcanizeDB lite node, "
+                                 "reducing load on the Ethereum node for Vault query")
+
         parser.add_argument("--max-errors", type=int, default=100,
                             help="Maximum number of allowed errors before the keeper terminates (default: 100)")
 
         parser.add_argument("--debug", dest='debug', action='store_true',
                             help="Enable debug output")
+
+        parser.add_argument("--ethgasstation-api-key", type=str, default=None, help="ethgasstation API key")
 
         parser.set_defaults(cageFacilitated=False)
         self.arguments = parser.parse_args(args)
@@ -103,6 +110,12 @@ class CageKeeper:
         self.cageFacilitated = self.arguments.cageFacilitated
 
         self.confirmations = 0
+
+        # Create gas strategy
+        if self.arguments.ethgasstation_api_key:
+            self.gas_price = DynamicGasPrice(self.arguments.ethgasstation_api_key)
+        else:
+            self.gas_price = DefaultGasPrice()
 
 
         logging.basicConfig(format='%(asctime)-15s %(levelname)-8s %(message)s',
@@ -137,15 +150,12 @@ class CageKeeper:
         self.logger.info('')
 
 
-
     def process_block(self):
         """Callback called on each new block. If too many errors, terminate the keeper to minimize potential damage."""
         if self.errors >= self.max_errors:
             self.lifecycle.terminate()
         else:
             self.check_cage()
-
-
 
 
     def check_cage(self):
@@ -187,7 +197,6 @@ class CageKeeper:
             self.logger.info(f'======== System has been caged ( {self.confirmations} confirmations) ========')
 
 
-
     def facilitate_processing_period(self):
         """ Yank all active flap/flop auctions, cage all ilks, skip all flip auctions, skim all underwater urns  """
         self.logger.info('')
@@ -205,20 +214,20 @@ class CageKeeper:
 
         # Cage all ilks
         for ilk in ilks:
-            self.dss.end.cage(ilk).transact(gas_price=self.gas_price())
+            self.dss.end.cage(ilk).transact(gas_price=self.gas_price)
 
         # Skip all flip auctions
         for key in auctions["flips"].keys():
             ilk = self.dss.vat.ilk(key)
             for bid in auctions["flips"][key]:
-                self.dss.end.skip(ilk,bid.id).transact(gas_price=self.gas_price())
+                self.dss.end.skip(ilk,bid.id).transact(gas_price=self.gas_price)
 
         #get all underwater urns
-        urns = self.get_underwater_urns()
+        urns = self.get_underwater_urns(ilks)
 
         #skim all underwater urns
         for i in urns:
-            self.dss.end.skim(i.ilk, i.address).transact(gas_price=self.gas_price())
+            self.dss.end.skim(i.ilk, i.address).transact(gas_price=self.gas_price)
 
 
     def thaw_cage(self):
@@ -232,15 +241,14 @@ class CageKeeper:
         # check if Dai is in Vow and annialate it with Heal()
         dai = self.dss.vat.dai(self.dss.vow.address)
         if dai > Rad(0):
-            self.dss.vow.heal(dai).transact(gas_price=self.gas_price())
+            self.dss.vow.heal(dai).transact(gas_price=self.gas_price)
 
         # Call thaw and Fix outstanding supply of Dai
-        self.dss.end.thaw().transact(gas_price=self.gas_price())
+        self.dss.end.thaw().transact(gas_price=self.gas_price)
 
         # Set fix (collateral/Dai ratio) for all Ilks
         for ilk in ilks:
-            self.dss.end.flow(ilk).transact(gas_price=self.gas_price())
-
+            self.dss.end.flow(ilk).transact(gas_price=self.gas_price)
 
 
     def get_ilks(self)-> List[Ilk]:
@@ -253,7 +261,6 @@ class CageKeeper:
         ilks = [self.dss.vat.ilk(i) for i in ilkNames]
 
         return ilks
-
 
 
     def check_ilks(self) -> List[Ilk]:
@@ -274,27 +281,32 @@ class CageKeeper:
         return deploymentIlks
 
 
-
-    def get_underwater_urns(self) -> List[Urn]:
+    def get_underwater_urns(self, ilks: List) -> List[Urn]:
         """ With all urns every frobbed, compile and return a list urns that are under-collateralized up to 100%  """
-        urns = self.dss.vat.urns(from_block=self.deployment_block)
 
         # Check if underwater ->  urn.art * ilk.rate > urn.ink * ilk.spot * spotter.mat[ilk]
         underwater_urns = []
 
-        for ilk in urns.keys():
-            for urn in urns[ilk].keys():
-                urns[ilk][urn].ilk = self.dss.vat.ilk(urns[ilk][urn].ilk.name)
-                mat = self.dss.spotter.mat(urns[ilk][urn].ilk)
-                usdDebt = Ray(urns[ilk][urn].art) * urns[ilk][urn].ilk.rate
-                usdCollateral = Ray(urns[ilk][urn].ink) * urns[ilk][urn].ilk.spot * mat
+        for ilk in ilks:
+
+            urn_history = UrnHistory(self.web3,
+                                     self.dss,
+                                     ilk,
+                                     self.deployment_block,
+                                     self.arguments.vulcanize_endpoint)
+
+            urns = urn_history.get_urns()
+
+            for urn in urns.values():
+                urn.ilk = self.dss.vat.ilk(urn.ilk.name)
+                mat = self.dss.spotter.mat(urn.ilk)
+                usdDebt = Ray(urn.art) * urn.ilk.rate
+                usdCollateral = Ray(urn.ink) * urn.ilk.spot * mat
 
                 if usdDebt > usdCollateral:
-                    underwater_urns.append(urns[ilk][urn])
+                    underwater_urns.append(urn)
 
         return underwater_urns
-
-
 
 
     def all_active_auctions(self) -> dict:
@@ -340,15 +352,10 @@ class CageKeeper:
     def yank_auctions(self, flapBids: List, flopBids: List):
         """ Calls Flap.yank and Flop.yank on all auctions ids that meet the cage criteria """
         for bid in flapBids:
-            self.dss.flapper.yank(bid.id).transact(gas_price=self.gas_price())
+            self.dss.flapper.yank(bid.id).transact(gas_price=self.gas_price)
 
         for bid in flopBids:
-            self.dss.flopper.yank(bid.id).transact(gas_price=self.gas_price())
-
-
-    def gas_price(self):
-        """  DefaultGasPrice """
-        return DefaultGasPrice()
+            self.dss.flopper.yank(bid.id).transact(gas_price=self.gas_price)
 
 
 if __name__ == '__main__':

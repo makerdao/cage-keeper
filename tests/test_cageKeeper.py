@@ -37,6 +37,7 @@ from pymaker.shutdown import ShutdownModule, End
 
 from tests.test_auctions import create_debt, check_active_auctions, max_dart, simulate_bite
 from tests.test_dss import mint_mkr, wrap_eth, frob, set_collateral_price
+from tests.helpers import time_travel_by
 
 
 def open_cdp(mcd: DssDeployment, collateral: Collateral, address: Address, debtMultiplier: int = 1):
@@ -267,21 +268,6 @@ def fire_esm(mcd: DssDeployment):
     assert not mcd.end.live()
 
 
-def time_travel_by(web3: Web3, seconds: int):
-    assert(isinstance(web3, Web3))
-    assert(isinstance(seconds, int))
-
-    if "parity" in web3.version.node.lower():
-        print(f"time travel unsupported by parity; waiting {seconds} seconds")
-        time.sleep(seconds)
-        # force a block mining to have a correct timestamp in latest block
-        web3.eth.sendTransaction({'from': web3.eth.accounts[0], 'to': web3.eth.accounts[1], 'value': 1})
-    else:
-        web3.manager.request_blocking("evm_increaseTime", [seconds])
-        # force a block mining to have a correct timestamp in latest block
-        web3.manager.request_blocking("evm_mine", [])
-
-
 def print_out(testName: str):
     print("")
     print(f"{testName}")
@@ -326,8 +312,9 @@ class TestCageKeeper:
         previous_eth_price = open_underwater_urn(mcd, mcd.collaterals['ETH-A'], guy_address)
         open_cdp(mcd, mcd.collaterals['ETH-C'], our_address)
 
+        ilks = keeper.check_ilks()
 
-        urns = keeper.get_underwater_urns()
+        urns = keeper.get_underwater_urns(ilks)
         assert type(urns) is list
         assert all(isinstance(x, Urn) for x in urns)
         assert len(urns) == 1
