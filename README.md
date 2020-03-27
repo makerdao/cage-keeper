@@ -86,7 +86,7 @@ You can then run all tests with:
 ```
 
 ## Roadmap
-- [ ]  [Dynamic gas pricing strategy](https://github.com/makerdao/market-maker-keeper/blob/master/market_maker_keeper/gas.py)
+- [ ]  Asynchronous Transactions for improved performance
 - [ ]  Interactive startup (ask if cage has already been facilitated by the keeper)
 - [ ]  Call `Vow.heal()` and `End.thaw()` atomically
 - [ ]  Gas optimization (check to see if function has been called already, etc)
