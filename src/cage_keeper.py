@@ -130,7 +130,6 @@ class CageKeeper:
         if it recieves a SIGINT/SIGTERM signal.
 
         """
-
         with Lifecycle(self.web3) as lifecycle:
             self.lifecycle = lifecycle
             lifecycle.on_startup(self.check_deployment)
@@ -251,34 +250,16 @@ class CageKeeper:
             self.dss.end.flow(ilk).transact(gas_price=self.gas_price)
 
 
-    def get_ilks(self)-> List[Ilk]:
-        """ From the block of Vat contract deployment, check which ilks have been frobbed  """
-        current_blockNumber = self.web3.eth.blockNumber
-        blocks = current_blockNumber - self.deployment_block
-
-        frobs = self.dss.vat.past_frobs(blocks)
-        ilkNames = list(dict.fromkeys([i.ilk for i in frobs]))
-        ilks = [self.dss.vat.ilk(i) for i in ilkNames]
-
-        return ilks
-
-
     def check_ilks(self) -> List[Ilk]:
-        """ Check if there's a discrepancy in the ilks included in pymaker's deployment file and those that have ever been frobbed"""
-        ilks = self.get_ilks()
-        ilkNames = [i.name for i in ilks]
+        """ Use Ilks as saved in https://github.com/makerdao/pymaker/tree/master/config """
 
-        deploymentIlks = [self.dss.collaterals[key].ilk for key in self.dss.collaterals.keys()]
-        deploymentIlkNames = [i.name for i in deploymentIlks]
+        ilks = [self.dss.collaterals[key].ilk for key in self.dss.collaterals.keys()]
+        ilksFiltered = list(filter(lambda l: l.name != 'SAI', ilks))
+        ilkNames = [i.name for i in deploymentIlksFiltered]
 
-        if set(ilkNames) != set(deploymentIlkNames):
-            self.logger.info('==== NOTE, Discrepancy in frobbed ilks and collaterals in deployment file ====')
-            self.logger.info(f'Frobbed ilks: {ilkNames}')
-            self.logger.info(f'Deployment ilks: {deploymentIlkNames}')
-            self.logger.info('====================== Will continue with deployment ilks ====================')
-            self.logger.info('')
+        self.logger.info(f'Ilks to check: {ilkNames}')
 
-        return deploymentIlks
+        return ilksFiltered
 
 
     def get_underwater_urns(self, ilks: List) -> List[Urn]:
@@ -297,6 +278,9 @@ class CageKeeper:
 
             urns = urn_history.get_urns()
 
+            self.logger.info(f'Collected {len(urns)} from {ilk}')
+
+            i = 0
             for urn in urns.values():
                 urn.ilk = self.dss.vat.ilk(urn.ilk.name)
                 mat = self.dss.spotter.mat(urn.ilk)
@@ -305,6 +289,10 @@ class CageKeeper:
 
                 if usdDebt > usdCollateral:
                     underwater_urns.append(urn)
+                i += 1;
+
+                if i % 10 == 0:
+                    self.logger.info(f'Processed {i} urns of {ilk.name}')
 
         return underwater_urns
 
