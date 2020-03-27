@@ -4,6 +4,3 @@
 [submodule "lib/auction-keeper"]
 	path = lib/auction-keeper
 	url = https://github.com/makerdao/auction-keeper.git
-[submodule "lib/ethgasstation-client"]
-	path = lib/ethgasstation-client
-	url = https://github.com/makerdao/ethgasstation-client.git
