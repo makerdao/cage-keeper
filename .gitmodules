@@ -4,3 +4,6 @@
 [submodule "lib/auction-keeper"]
 	path = lib/auction-keeper
 	url = https://github.com/makerdao/auction-keeper.git
+[submodule "lib/pygasprice-client"]
+	path = lib/pygasprice-client
+	url = https://github.com/makerdao/pygasprice-client.git
