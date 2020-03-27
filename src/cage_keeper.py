@@ -203,7 +203,7 @@ class CageKeeper:
         self.logger.info('')
 
         # check ilks
-        ilks = self.check_ilks()
+        ilks = self.get_ilks()
 
         # Get all auctions that can be yanked after cage
         auctions = self.all_active_auctions()
@@ -235,7 +235,7 @@ class CageKeeper:
         self.logger.info('======== Thawing Cage ========')
         self.logger.info('')
 
-        ilks = self.check_ilks()
+        ilks = self.get_ilks()
 
         # check if Dai is in Vow and annialate it with Heal()
         dai = self.dss.vat.dai(self.dss.vow.address)
@@ -250,7 +250,7 @@ class CageKeeper:
             self.dss.end.flow(ilk).transact(gas_price=self.gas_price)
 
 
-    def check_ilks(self) -> List[Ilk]:
+    def get_ilks(self) -> List[Ilk]:
         """ Use Ilks as saved in https://github.com/makerdao/pymaker/tree/master/config """
 
         ilks = [self.dss.collaterals[key].ilk for key in self.dss.collaterals.keys()]
@@ -265,7 +265,6 @@ class CageKeeper:
     def get_underwater_urns(self, ilks: List) -> List[Urn]:
         """ With all urns every frobbed, compile and return a list urns that are under-collateralized up to 100%  """
 
-        # Check if underwater ->  urn.art * ilk.rate > urn.ink * ilk.spot * spotter.mat[ilk]
         underwater_urns = []
 
         for ilk in ilks:
@@ -286,7 +285,7 @@ class CageKeeper:
                 mat = self.dss.spotter.mat(urn.ilk)
                 usdDebt = Ray(urn.art) * urn.ilk.rate
                 usdCollateral = Ray(urn.ink) * urn.ilk.spot * mat
-
+                # Check if underwater ->  urn.art * ilk.rate > urn.ink * ilk.spot * spotter.mat[ilk]
                 if usdDebt > usdCollateral:
                     underwater_urns.append(urn)
                 i += 1;
