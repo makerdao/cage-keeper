@@ -113,7 +113,7 @@ class CageKeeper:
 
         # Create gas strategy
         if self.arguments.ethgasstation_api_key:
-            self.gas_price = DynamicGasPrice(self.arguments.ethgasstation_api_key)
+            self.gas_price = DynamicGasPrice(self.arguments)
         else:
             self.gas_price = DefaultGasPrice()
 
@@ -255,11 +255,13 @@ class CageKeeper:
 
         ilks = [self.dss.collaterals[key].ilk for key in self.dss.collaterals.keys()]
         ilksFiltered = list(filter(lambda l: l.name != 'SAI', ilks))
-        ilkNames = [i.name for i in deploymentIlksFiltered]
+        ilks_with_debt = list(filter(lambda l: self.dss.vat.ilk(l.name).art > Wad(0), ilksFiltered))
+
+        ilkNames = [i.name for i in ilks_with_debt]
 
         self.logger.info(f'Ilks to check: {ilkNames}')
 
-        return ilksFiltered
+        return ilks_with_debt
 
 
     def get_underwater_urns(self, ilks: List) -> List[Urn]:
@@ -290,7 +292,7 @@ class CageKeeper:
                     underwater_urns.append(urn)
                 i += 1;
 
-                if i % 10 == 0:
+                if i % 100 == 0:
                     self.logger.info(f'Processed {i} urns of {ilk.name}')
 
         return underwater_urns
