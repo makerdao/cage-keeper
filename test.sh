@@ -9,7 +9,7 @@ docker-compose up -d
 sleep 2
 popd
 
-PYTHONPATH=$PYTHONPATH:./lib/pymaker:./lib/auction-keeper:./lib/ethgasstation-client py.test -s --cov=src --cov-report=term --cov-append tests/test_cageKeeper.py $@
+PYTHONPATH=$PYTHONPATH:./lib/pymaker:./lib/auction-keeper:./lib/pygasprice-client py.test -s --cov=src --cov-report=term --cov-append tests/test_cageKeeper.py $@
 TEST_RESULT=$?
 
 echo Stopping container

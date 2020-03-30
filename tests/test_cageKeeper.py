@@ -279,40 +279,17 @@ pytest.global_auctions = {}
 
 class TestCageKeeper:
 
-    # @pytest.mark.skip(reason="done")
     def test_check_deployment(self, mcd: DssDeployment, keeper: CageKeeper):
         print_out("test_check_deployment")
         keeper.check_deployment()
 
-    def test_get_ilks(self, mcd: DssDeployment, keeper: CageKeeper):
-        print_out("test_get_ilks")
-
-        print(f"Dai: {mcd.vat.dai(mcd.vow.address)}")
-        print(f"Sin: {mcd.vat.sin(mcd.vow.address)}")
-        ilks = keeper.get_ilks()
-        assert type(ilks) is list
-        assert all(isinstance(x, Ilk) for x in ilks)
-        deploymentIlks = [mcd.vat.ilk(key) for key in mcd.collaterals.keys()]
-        assert all(elem in deploymentIlks for elem in ilks)
-
-    # @pytest.mark.skip(reason="done")
-    def test_check_ilks(self, mcd: DssDeployment, keeper: CageKeeper):
-        print_out("test_check_ilks")
-        ilks = keeper.check_ilks()
-        ilkNames = ilkNames = [i.name for i in ilks]
-        assert type(ilks) is list
-        assert all(isinstance(x, Ilk) for x in ilks)
-        deploymentIlkNames = [mcd.collaterals[key].ilk.name for key in mcd.collaterals.keys()]
-        assert set(ilkNames) == set(deploymentIlkNames)
-
-    # @pytest.mark.skip(reason="done")
     def test_get_underwater_urns(self, mcd: DssDeployment, keeper: CageKeeper, guy_address: Address, our_address: Address):
         print_out("test_get_underwater_urns")
 
         previous_eth_price = open_underwater_urn(mcd, mcd.collaterals['ETH-A'], guy_address)
         open_cdp(mcd, mcd.collaterals['ETH-C'], our_address)
 
-        ilks = keeper.check_ilks()
+        ilks = keeper.get_ilks()
 
         urns = keeper.get_underwater_urns(ilks)
         assert type(urns) is list
@@ -324,9 +301,18 @@ class TestCageKeeper:
 
         pytest.global_urns = urns
 
+    def test_get_ilks(self, mcd: DssDeployment, keeper: CageKeeper):
+        print_out("test_get_ilks")
 
+        ilks = keeper.get_ilks()
+        assert type(ilks) is list
+        assert all(isinstance(x, Ilk) for x in ilks)
+        deploymentIlks = [mcd.vat.ilk(key) for key in mcd.collaterals.keys()]
 
-    # @pytest.mark.skip(reason="done")
+        empty_deploymentIlks = list(filter(lambda l: mcd.vat.ilk(l.name).art == Wad(0), deploymentIlks))
+
+        assert all(elem not in empty_deploymentIlks for elem in ilks)
+
     def test_active_auctions(self, mcd: DssDeployment, keeper: CageKeeper, our_address: Address, other_address: Address, deployment_address: Address):
         print_out("test_active_auctions")
         print(f"Sin: {mcd.vat.sin(mcd.vow.address)}")
@@ -368,8 +354,6 @@ class TestCageKeeper:
 
         pytest.global_auctions = auctions
 
-
-    # @pytest.mark.skip(reason="done")
     def test_check_cage(self, mcd: DssDeployment, keeper: CageKeeper, our_address: Address, other_address: Address):
         print_out("test_check_cage")
         keeper.check_cage()
@@ -398,15 +382,13 @@ class TestCageKeeper:
 
         keeper.check_cage() # Facilitate cooldown (thawing cage)
 
-
-    # @pytest.mark.skip(reason="possibly incomplete")
     def test_cage_keeper(self, mcd: DssDeployment, keeper: CageKeeper, our_address: Address, other_address: Address):
         print_out("test_cage_keeper")
-        frobbedIlks = keeper.get_ilks()
+        ilks = keeper.get_ilks()
         urns = pytest.global_urns
         auctions = pytest.global_auctions
 
-        for ilk in frobbedIlks:
+        for ilk in ilks:
             # Check if cage(ilk) called on all ilks
             assert mcd.end.tag(ilk) > Ray(0)
 
