@@ -30,10 +30,38 @@ As can be seen in the above flowchart, the keeper checks if the system has been 
 
 ## Operation
 
-This keeper can either run continuously on a local/virtual machine or be run when the operator becomes aware of Emergency Shutdown. A sample startup script is shown below. The keeper's ethereum address should have enough ETH to cover gas costs and is a function of the protocol's state at the time of shutdown (i.e. more urns to `skim` means more required ETH to cover gas costs).
-When new collateral types are added to the protocol, the operator should pull the latest version of the keeper, which would include contracts associated with the aforementioned collateral types.
+Once the keys to an ethereum address are supplied at startup, the keeper works out of the box. It can either run continuously on a local/virtual machine or be run when the operator becomes aware of Emergency Shutdown. A sample startup script is shown below. When new collateral types are added to the protocol, the operator should pull the latest version of the keeper, which would include contracts associated with the aforementioned collateral types.
 
-After the `cage-keeper` facilitates the processing period, it can be turned off until `End.wait` is nearly reached. Then, at that point, the operator would pass in the `--previous-cage` argument during keeper start in order to bypass the feature that supports the processing period.
+After the `cage-keeper` facilitates the processing period, it can be turned off until `End.wait` is nearly reached. Then, at that point, the operator would pass in the `--previous-cage` argument during keeper start in order to bypass the feature that supports the processing period. Continuous operation removes the need for this flag.
+
+The keeper's ethereum address should have enough ETH to cover gas costs and is a function of the protocol's state at the time of shutdown (i.e. more Vaults to `skim` means more required ETH to cover gas costs). The following equation approximates how much ETH is required:
+```
+min_ETH = average_gasPrice * [ ( Flopper.yank()_gas * #_of_Flop_Auctions     ) +
+                               ( Flapper.yank()_gas * #_of_Flap_Auctions     ) +
+                               ( End.cage(Ilk)_gas  * #_of_Collateral_Types  ) +
+                               ( End.skip()_gas     * #_of_Flip_Auctions     ) +
+                               ( End.skim()_gas     * #_of_Underwater_Vaults ) +
+                               ( Vow.heal()_gas                              ) +
+                               ( End.thaw()_gas                              ) +
+                               ( End.flow(Ilk)_gas  * #_of_Collateral_Types  ) ]
+```
+
+Here's an example from a recent Kovan test of the `cage-keeper`; note that the gasCost arguments in this example are conservative upper bounds, computed from `web3.eth.estimateGas()`, which calls the [eth_estimateGas JSON-RPC method](https://github.com/ethereum/wiki/wiki/JSON-RPC#eth_estimategas).
+```
+min_ETH = 15 GWei * [ ( 196605 * 1  ) +
+                      ( 154892 * 1  ) +
+                      ( 187083 * 3  ) +
+                      ( 389191 * 3  ) +
+                      ( 223399 * 30 ) +
+                      ( 166397      ) +
+                      ( 157094      ) +
+                      ( 159159 * 3  ) ]
+min_ETH = 15 GWei * 9583257
+min_ETH ~= 0.1437 ETH
+```
+
+
+
 
 ### Installation
 #### Prerequisites
@@ -63,7 +91,8 @@ Make a run-cage-keeper.sh to easily spin up the cage-keeper.
 	--network 'kovan' \
 	--eth-from '0xABCAddress' \
 	--eth-key 'key_file=/full/path/to/keystoreFile.json,pass_file=/full/path/to/passphrase/file.txt' \
-	--vat-deployment-block 14374534
+	--vat-deployment-block 14374534 \
+  [--vulcanize-endpoint 'http://vdb.sampleendpoint.com:8545/graphql']
 ```
 
 
