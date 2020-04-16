@@ -19,16 +19,17 @@ then
     fi
   done
 
-  if [ ! -z $SECRET_KEY ]
-  then
+  if [[ -n "${SECRET_KEY}" ]]; then
     touch ${key_file_location}
     echo $SECRET_KEY | sed 's/\\"/\"/g' >> ${key_file_location}
-  elif [ ! -z $SECRET_PASS ]
-  then
+  else
+    echo "No secret key to write to file."
+  fi
+  if [[ -n "${SECRET_PASS}" ]]; then
     touch pass_file_location
     echo $SECRET_PASS >> ${pass_file_location}
   else
-    echo "No secret envs to write to file."
+    echo "No secret pass to write to file."
   fi
 
 fi
