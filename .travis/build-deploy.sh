@@ -20,19 +20,21 @@ else
 fi
 
 if [ -z "$ENVIRONMENT" ]; then
-    echo 'You must specifiy an envionrment (bash build-deploy.sh <ENVIRONMENT>).'
-    echo 'Allowed values are "staging" or "prod"'
-    exit 1
+  echo 'You must specifiy an envionrment (bash build-deploy.sh <ENVIRONMENT>).'
+  echo 'Allowed values are "staging" or "prod"'
+  exit 1
 fi
 
 # build image
-docker build -t $TRAVIS_REPO_SLUG:$TAG .
+message BUILDING IMAGE
+docker build -t "$TRAVIS_REPO_SLUG:$TAG" .
 
 # docker login
-echo "$DOCKER_PASSWORD" | docker login --username "$DOCKER_USER" --password-stdin
+#echo "$DOCKER_PASSWORD" | docker login --username "$DOCKER_USER" --password-stdin
+docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
 
 # docker push
-docker push $TRAVIS_REPO_SLUG:$TAG
+docker push "$TRAVIS_REPO_SLUG:$TAG"
 
 # service deploy
 if [ "$ENVIRONMENT" == "prod" ]; then

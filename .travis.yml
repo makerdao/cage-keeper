@@ -27,10 +27,10 @@ after_success:
   - codecov
 
 deploy:
-  provider: script
-  script: bash ./.travis/build-deploy.sh prod us-east-1
-  on:
-    branch: TO-779-dockerize-cage-keeper
+  - provider: script
+    script: bash ./.travis/build-deploy.sh prod us-east-1
+    on:
+      branch: TO-779-dockerize-cage-keeper
 
 notifications:
   email: false
