@@ -30,8 +30,7 @@ message BUILDING IMAGE
 docker build -t "$TRAVIS_REPO_SLUG:$TAG" .
 
 # docker login
-#echo "$DOCKER_PASSWORD" | docker login --username "$DOCKER_USER" --password-stdin
-docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+echo "$DOCKER_PASSWORD" | docker login --username "$DOCKER_USER" --password-stdin
 
 # docker push
 docker push "$TRAVIS_REPO_SLUG:$TAG"
