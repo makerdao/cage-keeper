@@ -11,19 +11,24 @@ cache: pip
 before_cache:
   - rm -f $HOME/.cache/pip/log/debug.log
 
+before_install:
+  - apt-get update
+  - apt-get -y install python3-pip
+  - pip3 install awscli
+
 install:
   - pip install $(cat requirements.txt $(find lib -name requirements.txt | sort) | sort | uniq | sed 's/ *== */==/g')
   - pip install -r requirements-dev.txt
 
 script:
-  - "./test.sh"
+  - ./test.sh
 
 after_success:
   - codecov
 
 deploy:
   provider: script
-  script: bash docker_push.sh
+  script: bash ./.travis/build-deploy.sh prod us-east-1
   on:
     branch: TO-779-dockerize-cage-keeper
 
@@ -34,3 +39,5 @@ env:
   global:
   - secure: TksX6bbvaB3AoCjC1UdbhS9N7TcQLdo7lNPFXPMzdVlM5WWxETqXZaPhla5Wf5M1diX6sY6hNWsgx3Tvar43tWCtpNha6f1nvlgCRQRsU4KEP9Vr0SJEGUQssCE34JlFcQW97P79waefItTTfgjyj4O9t9KI+YN7cmJj6Nd6SEOd9zETBoVNWn9Sz3zqxUJEPk14QHMeK0g1mJt9J3gb1xw3OGqYfP0egxrbikxPhw8zZ4jncWfnUr1r7KIy4pZr0cQ4zxCFOIIx63NN63yFEqGhG3ZfFKmorjTtcopRcthSZb6Qbv4/PdT5QoXBfQfWVuXa8C+T95aFlMkEc5l05hiwPVGUJRdgv2F/+ors5CIQgeZEsemnoU8WF/zcoXNG9kWETmmhHVaMk8uJ8PwpGmbZ0q9c+fFlIPMOdoTpzxU3yFWpLi3TavJSjk+JMoKBsXQ5tOHn6JdeBZelMA5ILoflwUVwaTkcYFu3kHa4ILeIbeheaXSU4dj6jZNpB2nEMxzJSU/K/DV6XfGXQanDEVlA88/2Wfib2ZnnInYpbsiUDLlVQEuiDFMPkcbgixyoT6HMjvoF2ggS5RFHapWSfSyUU2WK4aTR2CUAH3BdMLnctnrzR1uUBLva46xHU36w8HQr6ba9TldhwYNSt6kpOyWu9DdnKrICUV2YDR9fG5w=
   - secure: yqK35Wj3TY8Xwy6Bgvtz+0y2/5ag04E55ve/H8A61RTC8YVPmkgbS6ajTd882vYu+zJp0FPIzOMBmzekL28QG9mK0TxmwdPqV9N08OEkkz7WObjnz+floL8LHlNqDDE2gjmIxUrjXBljMfEW4oKgYJb3xgw7CTbsxfcGf2aZa3t5GSJGcOgvKXD42ya1wneoJz93k4LAMTtbug6I0rQYW+xLWNqdIxSZIsF07DLRTbN8YKkEp4j/bW6KYvRWiiHglKBfMAWDwqAm3B3JDg4nTj+ctaZ6CvspNJxajDd5YUylj4ywaFzHYNuttSDZQLqF/uqtMSeZDhAIBqTZfdX8+1xLiy33bja+iiQ6L5sR1eSn8NRg1oaIsegOJrthC/Hq4B9elVtUMKXzWHMMFC0Ezp7IwpIjzD4dwQ4ZjqselSznZTY911Jr8N9vQhZY3Vi3OfhIXENVtI4lDGu+/rbs6naDL61W3ZW/MiOfipczDJCS97lI8qCyArAT/LWWBed99uFt8Cbzw11CxF5Jjm3/LqmZsDz1T1IUj0hpsctE/ZotJh3z9I6rA7DSmul7JSN/vWTlaJ6NpbHzHT+WxEINxCFhQSpRgJ2N4drIachEQ8tlw58QeqHProhj0sVsLflX6s/rLDeTFHrMlcy+Y8m7NsflRhoXPgEex06td3jvlCM=
+  - secure: sLSlkF65seN3USqRleqQv0FYVL6sc3I+7muxqOvdKGNnwg1zgY/ZYSpgaTZcyjXDgA0jVNeVn8/ndedGNbdd7nYzL7rejtp0HTzZk+GMHkY2tmjRu6A6brkaCDadzpAdLa+UWeApx17h42jii3WuR6DeqqFY1KYHkGgdfqHN8rZmkpiQtrporUOLR47xGK1y8e7gwtXu/8mHNM1sjmqjoTzQ+SqweXTzQvVENM8/eEYLG1KwGJaVIj6wKiZ+KiTHtLx5EJ58bUk7k87btf2Zoea2mYsEhMdpmsUgJHGr+rdSGC+mEweN3dLgE21ZDIXqs/IPyXJAb2/o/c9RtBd+kZAC0zv1roQtPXATQjzKd0/2HOto+V5NnCcrqUnQzUlC3AIYcCps8Pllqs3eUCitKhdITJjYHNhzjv77ZFrLAhR6TjA0H4Ci/tDv3Xb+vz8MTOjUibIJCuz/pYpVXkfUEFzm3YNHW1vMzqdwHbWF4+gQRC2yb3dXcVlSY5C/bn3qWYeWMXMmGfM+RdeAD7LzFmgJsxm20wEQmlV0gpt5gCU6fYIGWTkxPzb7s0v2iGuTi6tKJgBFUkAbp/QGZ+iSgzUuqSpG4uaXxhKgHJqD1qRkBTDZzaxQSAk74X351Qlju2iOddSUG+llqfWBKkHs+4vE8DsYGGGVaZncuQJ5TNM=
+  - secure: mKerjqDt7jwrJwwnVgxBw55dh2kSCaPkElSc9Hk8KCrJcIX+a0bHB8ih4REUcZtdNYWBNXIa+GL2lUT/WdT5c8w84XDj2RHvDyZVHijvZqhD2vwtu2pr1CQLtNzxNhmCttwynUmUkBDo/6VuTKEAroEXZ3dXzwtFczNrnpcmPfIk6kNfRbyEz2D+zx0+ii2XY39wVVRu1wYMrXPVurV/0bvbcL7t60TS7kSFhFibkPCWgzVjIo81kQPvXfpU+rVWvQ4hqO04YdQQ+SOe0LWZ9L2SWnNhc6DSzsoEZDmviPK+uTo50QppzXnRNy0JCjNCOvImxBNejYKqQcryY2aShkYSrSwsNgED89O6VStq0iRYB3ahc7wqzjVU2I+VU7U1YQ+nJC4YCCQhBzZ/7/bBW0mD3HRHFwrtzEL+aBvfnI0u0b7pVvRYY91+TGamvC0hrcl6YS8ppGiLlkkfWtPru4QKb8rtpOSTyljB5E7zXQpX+cqlLPAfQKPRqFxfNizihiO5YqFD/UjxtoO8t05oxJOSsN7TaXaxEAACvLLrLdKzJzg1exMWfPyVtABm8wPukbrMEP4g5JGsvQU2ag9MZx27AWQ80IUNnBO53aKSCUrnHYwZpn9QnI5M0wDEgctsR0xvUaPzze7pmEqaSotOr5dmusOq0zm4/Hxw1vWZnZQ=
