@@ -6,16 +6,8 @@ RUN groupadd -r keeper && useradd -d /home/keeper -m --no-log-init -r -g keeper 
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/keeper
-# RUN git clone https://github.com/makerdao/cage-keeper.git && \
-#     cd cage-keeper && \
-#     git submodule update --init --recursive && \
-#     pip3 install virtualenv && \
-#     ./install.sh
 
-# RUN mkdir /opt/keeper/cage-keeper/secrets
-# COPY run-cage-keeper.sh /opt/keeper/cage-keeper
-
-RUN git clone --branch TO-779-dockerize-cage-keeper https://github.com/makerdao/cage-keeper.git && \
+RUN git clone https://github.com/makerdao/cage-keeper.git && \
     cd cage-keeper && \
     git submodule update --init --recursive && \
     pip3 install virtualenv && \
