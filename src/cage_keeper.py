@@ -91,6 +91,12 @@ class CageKeeper:
 
         parser.add_argument("--ethgasstation-api-key", type=str, default=None, help="ethgasstation API key")
 
+        parser.add_argument("--gas-initial-multiplier", type=str, default=1.0, help="ethgasstation API key")
+        parser.add_argument("--gas-reactive-multiplier", type=str, default=2.25, help="gas strategy tuning")
+        parser.add_argument("--gas-maximum", type=str, default=5000, help="gas strategy tuning")
+
+
+
         parser.set_defaults(cageFacilitated=False)
         self.arguments = parser.parse_args(args)
 
