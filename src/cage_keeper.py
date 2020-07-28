@@ -80,6 +80,9 @@ class CageKeeper:
                             help="When specified, frob history will be queried from a VulcanizeDB lite node, "
                                  "reducing load on the Ethereum node for Vault query")
 
+        parser.add_argument("--vulcanize-key", type=str,
+                            help="API key for the Vulcanize endpoint")
+
         parser.add_argument("--max-errors", type=int, default=100,
                             help="Maximum number of allowed errors before the keeper terminates (default: 100)")
 
@@ -87,6 +90,12 @@ class CageKeeper:
                             help="Enable debug output")
 
         parser.add_argument("--ethgasstation-api-key", type=str, default=None, help="ethgasstation API key")
+
+        parser.add_argument("--gas-initial-multiplier", type=str, default=1.0, help="ethgasstation API key")
+        parser.add_argument("--gas-reactive-multiplier", type=str, default=2.25, help="gas strategy tuning")
+        parser.add_argument("--gas-maximum", type=str, default=5000, help="gas strategy tuning")
+
+
 
         parser.set_defaults(cageFacilitated=False)
         self.arguments = parser.parse_args(args)
@@ -275,7 +284,8 @@ class CageKeeper:
                                      self.dss,
                                      ilk,
                                      self.deployment_block,
-                                     self.arguments.vulcanize_endpoint)
+                                     self.arguments.vulcanize_endpoint,
+                                     self.arguments.vulcanize_key)
 
             urns = urn_history.get_urns()
 
