@@ -35,7 +35,7 @@ from pymaker.dss import Collateral, Ilk, Urn
 from pymaker.numeric import Wad, Ray, Rad
 from pymaker.shutdown import ShutdownModule, End
 
-from tests.test_auctions import create_debt, check_active_auctions, max_dart, simulate_bite
+from tests.test_auctions import create_debt, check_active_auctions, max_dart
 from tests.test_dss import mint_mkr, wrap_eth, frob, set_collateral_price
 from tests.helpers import time_travel_by
 
@@ -202,7 +202,7 @@ def create_flip_auction(mcd: DssDeployment, deployment_address: Address, our_add
     ilk = mcd.vat.ilk(ilk.name)
     safe = Ray(urn.art) * mcd.vat.ilk(ilk.name).rate <= Ray(urn.ink) * ilk.spot
     assert not safe
-    simulate_bite(mcd, collateral, deployment_address)
+    assert mcd.cat.can_bite(collateral.ilk, Urn(deployment_address))
     assert mcd.cat.bite(collateral.ilk, Urn(deployment_address)).transact()
     flip_kick = collateral.flipper.kicks()
 
