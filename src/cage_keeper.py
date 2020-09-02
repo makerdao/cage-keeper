@@ -113,7 +113,7 @@ class CageKeeper:
 
         # Create gas strategy
         if self.arguments.ethgasstation_api_key:
-            self.gas_price = DynamicGasPrice(self.arguments)
+            self.gas_price = DynamicGasPrice(self.arguments, self.web3)
         else:
             self.gas_price = DefaultGasPrice()
 
