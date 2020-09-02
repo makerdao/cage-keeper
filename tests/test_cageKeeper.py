@@ -35,12 +35,12 @@ from pymaker.dss import Collateral, Ilk, Urn
 from pymaker.numeric import Wad, Ray, Rad
 from pymaker.shutdown import ShutdownModule, End
 
-from tests.test_auctions import create_debt, check_active_auctions, max_dart, simulate_bite
+from tests.test_auctions import create_debt, check_active_auctions, max_dart
 from tests.test_dss import mint_mkr, wrap_eth, frob, set_collateral_price
 from tests.helpers import time_travel_by
 
 
-def open_cdp(mcd: DssDeployment, collateral: Collateral, address: Address, debtMultiplier: int = 1):
+def open_vault(mcd: DssDeployment, collateral: Collateral, address: Address, debtMultiplier: int = 1):
     assert isinstance(mcd, DssDeployment)
     assert isinstance(collateral, Collateral)
     assert isinstance(address, Address)
@@ -63,9 +63,9 @@ def wipe_debt(mcd: DssDeployment, collateral: Collateral, address: Address):
 
 
 def open_underwater_urn(mcd: DssDeployment, collateral: Collateral, address: Address):
-    open_cdp(mcd, collateral, address, 50)
-    previous_eth_price = mcd.vat.ilk(collateral.ilk.name).spot
-    print(f"PREV ETH PRICE {previous_eth_price}")
+    open_vault(mcd, collateral, address, 100)
+    previous_eth_price = mcd.vat.ilk(collateral.ilk.name).spot * mcd.spotter.mat(collateral.ilk)
+    print(f"Previous ETH Price {previous_eth_price} USD")
     set_collateral_price(mcd, collateral, Wad.from_number(49))
 
     urn = mcd.vat.urn(collateral.ilk, address)
@@ -202,7 +202,7 @@ def create_flip_auction(mcd: DssDeployment, deployment_address: Address, our_add
     ilk = mcd.vat.ilk(ilk.name)
     safe = Ray(urn.art) * mcd.vat.ilk(ilk.name).rate <= Ray(urn.ink) * ilk.spot
     assert not safe
-    simulate_bite(mcd, collateral, deployment_address)
+    assert mcd.cat.can_bite(collateral.ilk, Urn(deployment_address))
     assert mcd.cat.bite(collateral.ilk, Urn(deployment_address)).transact()
     flip_kick = collateral.flipper.kicks()
 
@@ -287,7 +287,7 @@ class TestCageKeeper:
         print_out("test_get_underwater_urns")
 
         previous_eth_price = open_underwater_urn(mcd, mcd.collaterals['ETH-A'], guy_address)
-        open_cdp(mcd, mcd.collaterals['ETH-C'], our_address)
+        open_vault(mcd, mcd.collaterals['ETH-C'], our_address)
 
         ilks = keeper.get_ilks()
 
@@ -297,7 +297,10 @@ class TestCageKeeper:
         assert len(urns) == 1
         assert urns[0].address.address == guy_address.address
 
-        set_collateral_price(mcd, mcd.collaterals['ETH-A'], Wad(previous_eth_price))
+        ## We've multiplied by a small Ray amount to counteract
+        ## the residual dust (or lack thereof) in this step that causes
+        ## create_flop_auction fail
+        set_collateral_price(mcd, mcd.collaterals['ETH-A'], Wad(previous_eth_price * Ray.from_number(1.0001)))
 
         pytest.global_urns = urns
 
