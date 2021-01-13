@@ -87,7 +87,7 @@ Make a run-cage-keeper.sh to easily spin up the cage-keeper.
 ```
 #!/bin/bash
 /full/path/to/cage-keeper/bin/cage-keeper \
-	--rpc-host 'sample.ParityNode.com' \
+	--rpc-host 'https://sample.ParityNode.com:8545' \
 	--network 'kovan' \
 	--eth-from '0xABCAddress' \
 	--eth-key 'key_file=/full/path/to/keystoreFile.json,pass_file=/full/path/to/passphrase/file.txt' \
