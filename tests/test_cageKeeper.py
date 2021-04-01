@@ -30,8 +30,8 @@ from src.cage_keeper import CageKeeper
 from pymaker import Address
 from pymaker.approval import directly, hope_directly
 from pymaker.auctions import Flapper, Flopper, Flipper
-from pymaker.deployment import DssDeployment
-from pymaker.dss import Collateral, Ilk, Urn
+from pymaker.deployment import Collateral, DssDeployment
+from pymaker.dss import Ilk, Urn
 from pymaker.numeric import Wad, Ray, Rad
 from pymaker.shutdown import ShutdownModule, End
 

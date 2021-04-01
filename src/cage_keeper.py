@@ -28,7 +28,7 @@ from web3 import Web3
 
 from pymaker import Address, web3_via_http
 from pymaker.gas import DefaultGasPrice, FixedGasPrice
-from pymaker.auctions import Flipper, Flapper, Flopper
+from pymaker.auctions import Clipper, Flipper, Flapper, Flopper
 from pymaker.keys import register_keys
 from pymaker.lifecycle import Lifecycle
 from pymaker.numeric import Wad, Rad, Ray
@@ -36,7 +36,8 @@ from pymaker.token import ERC20Token
 from pymaker.deployment import DssDeployment
 from pymaker.dss import Ilk, Urn
 
-from auction_keeper.urn_history import UrnHistory
+from auction_keeper.urn_history import ChainUrnHistoryProvider
+from auction_keeper.urn_history_vulcanize import VulcanizeUrnHistoryProvider
 from auction_keeper.gas import DynamicGasPrice
 
 class CageKeeper:
@@ -93,7 +94,6 @@ class CageKeeper:
         parser.add_argument("--gas-maximum", type=str, default=5000, help="gas strategy tuning")
 
 
-
         parser.set_defaults(cageFacilitated=False)
         self.arguments = parser.parse_args(args)
 
@@ -128,7 +128,6 @@ class CageKeeper:
         logging.basicConfig(format='%(asctime)-15s %(levelname)-8s %(message)s',
                             level=(logging.DEBUG if self.arguments.debug else logging.INFO))
 
-
     def main(self):
         """ Initialize the lifecycle and enter into the Keeper Lifecycle controller
 
@@ -142,7 +141,6 @@ class CageKeeper:
             lifecycle.on_startup(self.check_deployment)
             lifecycle.on_block(self.process_block)
 
-
     def check_deployment(self):
         self.logger.info('')
         self.logger.info('Please confirm the deployment details')
@@ -155,14 +153,12 @@ class CageKeeper:
         self.logger.info(f'End: {self.dss.end.address}')
         self.logger.info('')
 
-
     def process_block(self):
         """Callback called on each new block. If too many errors, terminate the keeper to minimize potential damage."""
         if self.errors >= self.max_errors:
             self.lifecycle.terminate()
         else:
             self.check_cage()
-
 
     def check_cage(self):
         """ After live is 0 for 12 block confirmations, facilitate the processing period, then thaw the cage """
@@ -202,7 +198,6 @@ class CageKeeper:
             self.confirmations = self.confirmations + 1
             self.logger.info(f'======== System has been caged ( {self.confirmations} confirmations) ========')
 
-
     def facilitate_processing_period(self):
         """ Yank all active flap/flop auctions, cage all ilks, skip all flip auctions, skim all underwater urns  """
         self.logger.info('')
@@ -235,7 +230,6 @@ class CageKeeper:
         for i in urns:
             self.dss.end.skim(i.ilk, i.address).transact(gas_price=self.gas_price)
 
-
     def thaw_cage(self):
         """ Once End.wait is reached, annihilate any lingering Dai in the vow, thaw the cage, and set the fix for all ilks  """
         self.logger.info('')
@@ -256,7 +250,6 @@ class CageKeeper:
         for ilk in ilks:
             self.dss.end.flow(ilk).transact(gas_price=self.gas_price)
 
-
     def get_ilks(self) -> List[Ilk]:
         """ Use Ilks as saved in https://github.com/makerdao/pymaker/tree/master/config """
 
@@ -270,7 +263,6 @@ class CageKeeper:
 
         return ilks_with_debt
 
-
     def get_underwater_urns(self, ilks: List) -> List[Urn]:
         """ With all urns every frobbed, compile and return a list urns that are under-collateralized up to 100%  """
 
@@ -278,13 +270,12 @@ class CageKeeper:
 
         for ilk in ilks:
 
-            urn_history = UrnHistory(self.web3,
-                                     self.dss,
-                                     ilk,
-                                     self.deployment_block,
-                                     self.arguments.vulcanize_endpoint,
-                                     self.arguments.vulcanize_key)
-
+            if self.arguments.vulcanize_endpoint:
+                urn_history = VulcanizeUrnHistoryProvider(self.web3, self.dss, ilk,
+                                                          self.arguments.vulcanize_endpoint,
+                                                          self.arguments.vulcanize_key)
+            else:
+                urn_history = ChainUrnHistoryProvider(self.web3, self.dss, ilk, self.deployment_block)
             urns = urn_history.get_urns()
 
             self.logger.info(f'Collected {len(urns)} from {ilk}')
@@ -305,28 +296,35 @@ class CageKeeper:
 
         return underwater_urns
 
-
     def all_active_auctions(self) -> dict:
         """ Aggregates active auctions that meet criteria to be called after Cage """
+        clips = {}
         flips = {}
         for collateral in self.dss.collaterals.values():
             # Each collateral has it's own flip contract; add auctions from each.
-            flips[collateral.ilk.name] = self.cage_active_auctions(collateral.flipper)
+            if collateral.clipper:
+                clips[collateral.ilk.name] = self.cage_active_auctions(collateral.clipper)
+            elif collateral.flipper:
+                flips[collateral.ilk.name] = self.cage_active_auctions(collateral.flipper)
 
         return {
+            "clips": clips,
             "flips": flips,
             "flaps": self.cage_active_auctions(self.dss.flapper),
             "flops": self.cage_active_auctions(self.dss.flopper)
         }
-
 
     def cage_active_auctions(self, parentObj) -> List:
         """ Returns auctions that meet the requiremenets to be called by End.skip, Flap.yank, and Flop.yank """
         active_auctions = []
         auction_count = parentObj.kicks()+1
 
+        if isinstance(parentObj, Clipper):
+            # TODO: something useful
+            return active_auctions
+
         # flip auctions
-        if isinstance(parentObj, Flipper):
+        elif isinstance(parentObj, Flipper):
             for index in range(1, auction_count):
                 bid = parentObj._bids(index)
                 if bid.guy != Address("0x0000000000000000000000000000000000000000"):
@@ -341,10 +339,7 @@ class CageKeeper:
                 if bid.guy != Address("0x0000000000000000000000000000000000000000"):
                     active_auctions.append(bid)
                 index += 1
-
-
         return active_auctions
-
 
     def yank_auctions(self, flapBids: List, flopBids: List):
         """ Calls Flap.yank and Flop.yank on all auctions ids that meet the cage criteria """
