@@ -86,7 +86,7 @@ def create_surplus(mcd: DssDeployment, flapper: Flapper, deployment_address: Add
     if joy < mcd.vow.hump() + mcd.vow.bump():
         # Create a CDP with surplus
         print('Creating a CDP with surplus')
-        collateral = mcd.collaterals['ETH-B']
+        collateral = mcd.collaterals['ETH-C']
         assert flapper.kicks() == 0
         wrap_eth(mcd, deployment_address, Wad.from_number(10))
         collateral.approve(deployment_address)
@@ -177,6 +177,48 @@ def dent(flopper: Flopper, id: int, address: Address, lot: Wad, bid: Rad):
     assert flopper.beg() * lot <= current_bid.lot
 
     assert flopper.dent(id, lot, bid).transact(from_address=address)
+
+
+def create_clip_auction(mcd: DssDeployment, deployment_address: Address, our_address: Address):
+    assert isinstance(mcd, DssDeployment)
+    assert isinstance(our_address, Address)
+    assert isinstance(deployment_address, Address)
+
+    collateral = mcd.collaterals['ETH-B']
+    ilk = collateral.ilk
+    original_price = Wad(mcd.web3.toInt(collateral.pip.read()))
+
+    # Create a vault
+    wrap_eth(mcd, deployment_address, Wad.from_number(1))
+    collateral.approve(deployment_address)
+    assert collateral.adapter.join(deployment_address, Wad.from_number(1)).transact(
+        from_address=deployment_address)
+    frob(mcd, collateral, deployment_address, dink=Wad.from_number(1), dart=Wad(0))
+    dart = max_dart(mcd, collateral, deployment_address) - Wad(1)
+    frob(mcd, collateral, deployment_address, dink=Wad(0), dart=dart)
+
+    # Undercollateralize and bark the vault
+    set_collateral_price(mcd, collateral, original_price / Wad.from_number(2))
+    urn = mcd.vat.urn(collateral.ilk, deployment_address)
+    ilk = mcd.vat.ilk(ilk.name)
+    safe = Ray(urn.art) * mcd.vat.ilk(ilk.name).rate <= Ray(urn.ink) * ilk.spot
+    assert not safe
+    assert mcd.dog.bark(ilk, urn).transact()
+    clip_kick = collateral.clipper.kicks()
+
+    # Generate some Dai, bid on part of the clip auction
+    wrap_eth(mcd, our_address, Wad.from_number(10))
+    collateral.approve(our_address)
+    assert collateral.adapter.join(our_address, Wad.from_number(10)).transact(from_address=our_address)
+    mcd.web3.eth.defaultAccount = our_address.address
+    frob(mcd, collateral, our_address, dink=Wad.from_number(10), dart=Wad.from_number(200))
+    collateral.clipper.approve(mcd.vat.address, approval_function=hope_directly())
+    (needs_redo, price, lot, tab) = collateral.clipper.status(clip_kick)
+    assert collateral.clipper.take(clip_kick, lot/Wad.from_number(2), price, our_address).transact(
+        from_address=our_address)
+
+    # Reset price
+    set_collateral_price(mcd, collateral, original_price)
 
 
 def create_flip_auction(mcd: DssDeployment, deployment_address: Address, our_address: Address):
@@ -323,11 +365,13 @@ class TestCageKeeper:
 
         create_flap_auction(mcd, deployment_address, our_address)
         create_flop_auction(mcd, deployment_address, other_address)
+        create_clip_auction(mcd, deployment_address, our_address)
         # this flip auction sets the collateral back to a price that makes the guy's vault underwater again.
         # 49 to make it underwater, and create_flip_auction sets it to 33
         create_flip_auction(mcd, deployment_address, our_address)
 
         auctions = keeper.all_active_auctions()
+        assert "clips" in auctions
         assert "flips" in auctions
         assert "flops" in auctions
         assert "flaps" in auctions
@@ -335,6 +379,13 @@ class TestCageKeeper:
         nobody = Address("0x0000000000000000000000000000000000000000")
 
         # All auctions active before cage have been yanked
+        for ilk in auctions["clips"].keys():
+            for auction in auctions["clips"][ilk]:
+                assert len(auctions["clips"][ilk]) == 1
+                assert auction.id > 0
+                assert auction.lot > Wad(0)
+                assert auction.usr != nobody
+
         for ilk in auctions["flips"].keys():
             for auction in auctions["flips"][ilk]:
                 assert len(auctions["flips"][ilk]) == 1
@@ -392,6 +443,7 @@ class TestCageKeeper:
         auctions = pytest.global_auctions
 
         for ilk in ilks:
+            print(f"Checking end.tag for {ilk.name}")
             # Check if cage(ilk) called on all ilks
             assert mcd.end.tag(ilk) > Ray(0)
 
@@ -404,6 +456,10 @@ class TestCageKeeper:
             assert urn.art == Wad(0)
 
         # All auctions active before cage have been yanked
+        for ilk in auctions["clips"].keys():
+            for auction in auctions["clips"][ilk]:
+                assert mcd.collaterals[ilk].clipper.sales(auction.id).lot == Wad(0)
+
         for ilk in auctions["flips"].keys():
             for auction in auctions["flips"][ilk]:
                 assert mcd.collaterals[ilk].flipper.bids(auction.id).lot == Wad(0)

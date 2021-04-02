@@ -217,16 +217,23 @@ class CageKeeper:
         for ilk in ilks:
             self.dss.end.cage(ilk).transact(gas_price=self.gas_price)
 
+        # Snip all clip auctions
+        for key in auctions["clips"].keys():
+            ilk = self.dss.vat.ilk(key)
+            for bid in auctions["clips"][key]:
+                # FIXME: dss-deploy-scripts isn't deploying this
+                self.dss.end.snip(ilk, bid.id).transact(gas_price=self.gas_price)
+
         # Skip all flip auctions
         for key in auctions["flips"].keys():
             ilk = self.dss.vat.ilk(key)
             for bid in auctions["flips"][key]:
-                self.dss.end.skip(ilk,bid.id).transact(gas_price=self.gas_price)
+                self.dss.end.skip(ilk, bid.id).transact(gas_price=self.gas_price)
 
-        #get all underwater urns
+        # get all underwater urns
         urns = self.get_underwater_urns(ilks)
 
-        #skim all underwater urns
+        # skim all underwater urns
         for i in urns:
             self.dss.end.skim(i.ilk, i.address).transact(gas_price=self.gas_price)
 
@@ -301,7 +308,7 @@ class CageKeeper:
         clips = {}
         flips = {}
         for collateral in self.dss.collaterals.values():
-            # Each collateral has it's own flip contract; add auctions from each.
+            # Each collateral has it's own contract; add auctions from each.
             if collateral.clipper:
                 clips[collateral.ilk.name] = self.cage_active_auctions(collateral.clipper)
             elif collateral.flipper:
@@ -319,9 +326,9 @@ class CageKeeper:
         active_auctions = []
         auction_count = parentObj.kicks()+1
 
+        # clip auctions
         if isinstance(parentObj, Clipper):
-            # TODO: something useful
-            return active_auctions
+            active_auctions = parentObj.active_auctions()
 
         # flip auctions
         elif isinstance(parentObj, Flipper):
