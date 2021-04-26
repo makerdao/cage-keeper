@@ -119,7 +119,6 @@ def create_flap_auction(mcd: DssDeployment, deployment_address: Address, our_add
     assert kick == 1
     assert len(flapper.active_auctions()) == 1
 
-
     mint_mkr(mcd.mkr, our_address, Wad.from_number(10))
     flapper.approve(mcd.mkr.address, directly(from_address=our_address))
     bid = Wad.from_number(0.001)
@@ -149,7 +148,6 @@ def create_flop_auction(mcd: DssDeployment, deployment_address: Address, our_add
     assert len(flopper.active_auctions()) == 1
     check_active_auctions(flopper)
     current_bid = flopper.bids(kicks)
-
 
     bid = Wad.from_number(0.000005)
     flopper.approve(mcd.vat.address, approval_function=hope_directly(from_address=our_address))
@@ -221,31 +219,31 @@ def create_clip_auction(mcd: DssDeployment, deployment_address: Address, our_add
     set_collateral_price(mcd, collateral, original_price)
 
 
-def create_flip_auction(mcd: DssDeployment, deployment_address: Address, our_address: Address):
+def create_flip_auction(mcd: DssDeployment, other_address: Address, our_address: Address):
     assert isinstance(mcd, DssDeployment)
     assert isinstance(our_address, Address)
-    assert isinstance(deployment_address, Address)
+    assert isinstance(other_address, Address)
 
     # Create a CDP
     collateral = mcd.collaterals['ETH-A']
     ilk = collateral.ilk
-    wrap_eth(mcd, deployment_address, Wad.from_number(1))
-    collateral.approve(deployment_address)
-    assert collateral.adapter.join(deployment_address, Wad.from_number(1)).transact(
-        from_address=deployment_address)
-    frob(mcd, collateral, deployment_address, dink=Wad.from_number(1), dart=Wad(0))
-    dart = max_dart(mcd, collateral, deployment_address) - Wad(1)
-    frob(mcd, collateral, deployment_address, dink=Wad(0), dart=dart)
+    wrap_eth(mcd, other_address, Wad.from_number(1))
+    collateral.approve(other_address)
+    assert collateral.adapter.join(other_address, Wad.from_number(1)).transact(
+        from_address=other_address)
+    frob(mcd, collateral, other_address, dink=Wad.from_number(1), dart=Wad(0))
+    # dart = max_dart(mcd, collateral, other_address) - Wad(1)
+    # frob(mcd, collateral, other_address, dink=Wad(0), dart=dart)
 
     # Undercollateralize and bite the CDP
     to_price = Wad(mcd.web3.toInt(collateral.pip.read())) / Wad.from_number(2)
     set_collateral_price(mcd, collateral, to_price)
-    urn = mcd.vat.urn(collateral.ilk, deployment_address)
+    urn = mcd.vat.urn(collateral.ilk, other_address)
     ilk = mcd.vat.ilk(ilk.name)
     safe = Ray(urn.art) * mcd.vat.ilk(ilk.name).rate <= Ray(urn.ink) * ilk.spot
     assert not safe
-    assert mcd.cat.can_bite(collateral.ilk, Urn(deployment_address))
-    assert mcd.cat.bite(collateral.ilk, Urn(deployment_address)).transact()
+    assert mcd.cat.can_bite(collateral.ilk, Urn(other_address))
+    assert mcd.cat.bite(collateral.ilk, Urn(other_address)).transact()
     flip_kick = collateral.flipper.kicks()
 
     # Generate some Dai, bid on the flip auction without covering all the debt
@@ -253,11 +251,10 @@ def create_flip_auction(mcd: DssDeployment, deployment_address: Address, our_add
     collateral.approve(our_address)
     assert collateral.adapter.join(our_address, Wad.from_number(10)).transact(from_address=our_address)
     mcd.web3.eth.defaultAccount = our_address.address
-    frob(mcd, collateral, our_address, dink=Wad.from_number(10), dart=Wad.from_number(200))
+    frob(mcd, collateral, our_address, dink=Wad.from_number(10), dart=Wad.from_number(0))
     collateral.flipper.approve(mcd.vat.address, approval_function=hope_directly())
     current_bid = collateral.flipper.bids(flip_kick)
     urn = mcd.vat.urn(collateral.ilk, our_address)
-    assert Rad(urn.art) > current_bid.tab
     bid = Rad.from_number(6)
     tend(collateral.flipper, flip_kick, our_address, current_bid.lot, bid)
 
@@ -287,7 +284,7 @@ def prepare_esm(mcd: DssDeployment, our_address: Address):
     assert isinstance(mcd.esm.address, Address)
     assert mcd.esm.sum() == Wad(0)
     assert mcd.esm.min() > Wad(0)
-    assert not mcd.esm.fired()
+    assert mcd.end.live()
 
     assert mcd.mkr.approve(mcd.esm.address).transact()
 
@@ -306,7 +303,6 @@ def prepare_esm(mcd: DssDeployment, our_address: Address):
 def fire_esm(mcd: DssDeployment):
     assert mcd.end.live()
     assert mcd.esm.fire().transact()
-    assert mcd.esm.fired()
     assert not mcd.end.live()
 
 
@@ -331,7 +327,8 @@ class TestCageKeeper:
         previous_eth_price = open_underwater_urn(mcd, mcd.collaterals['ETH-A'], guy_address)
         open_vault(mcd, mcd.collaterals['ETH-C'], our_address)
 
-        ilks = keeper.get_ilks()
+        ilks = list(map(lambda l: l.ilk, keeper.get_collaterals()))
+        assert len(ilks) >= 2
 
         urns = keeper.get_underwater_urns(ilks)
         assert type(urns) is list
@@ -346,17 +343,17 @@ class TestCageKeeper:
 
         pytest.global_urns = urns
 
-    def test_get_ilks(self, mcd: DssDeployment, keeper: CageKeeper):
-        print_out("test_get_ilks")
+    def test_get_collaterals(self, mcd: DssDeployment, keeper: CageKeeper):
+        print_out("test_get_collaterals")
 
-        ilks = keeper.get_ilks()
-        assert type(ilks) is list
-        assert all(isinstance(x, Ilk) for x in ilks)
+        collaterals = keeper.get_collaterals()
+        assert type(collaterals) is list
+        assert all(isinstance(x, Collateral) for x in collaterals)
         deploymentIlks = [mcd.vat.ilk(key) for key in mcd.collaterals.keys()]
 
         empty_deploymentIlks = list(filter(lambda l: mcd.vat.ilk(l.name).art == Wad(0), deploymentIlks))
 
-        assert all(elem not in empty_deploymentIlks for elem in ilks)
+        assert all(elem.ilk not in empty_deploymentIlks for elem in collaterals)
 
     def test_active_auctions(self, mcd: DssDeployment, keeper: CageKeeper, our_address: Address, other_address: Address, deployment_address: Address):
         print_out("test_active_auctions")
@@ -438,7 +435,7 @@ class TestCageKeeper:
 
     def test_cage_keeper(self, mcd: DssDeployment, keeper: CageKeeper, our_address: Address, other_address: Address):
         print_out("test_cage_keeper")
-        ilks = keeper.get_ilks()
+        ilks = list(map(lambda l: l.ilk, keeper.get_collaterals()))
         urns = pytest.global_urns
         auctions = pytest.global_auctions
 

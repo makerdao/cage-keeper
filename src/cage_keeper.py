@@ -1,6 +1,6 @@
 # This file is part of the Maker Keeper Framework.
 #
-# Copyright (C) 2019 EdNoepel, KentonPrescott
+# Copyright (C) 2019-2021 EdNoepel, KentonPrescott
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -18,27 +18,24 @@
 import argparse
 import logging
 import sys
-import time
 from datetime import datetime, timezone
-import types
-from os import path
 from typing import List
 
 from web3 import Web3
 
 from pymaker import Address, web3_via_http
-from pymaker.gas import DefaultGasPrice, FixedGasPrice
-from pymaker.auctions import Clipper, Flipper, Flapper, Flopper
+from pymaker.auctions import Clipper, Flipper
+from pymaker.deployment import Collateral, DssDeployment
+from pymaker.dss import Ilk, Urn
+from pymaker.gas import DefaultGasPrice
 from pymaker.keys import register_keys
 from pymaker.lifecycle import Lifecycle
 from pymaker.numeric import Wad, Rad, Ray
-from pymaker.token import ERC20Token
-from pymaker.deployment import DssDeployment
-from pymaker.dss import Ilk, Urn
 
 from auction_keeper.urn_history import ChainUrnHistoryProvider
 from auction_keeper.urn_history_vulcanize import VulcanizeUrnHistoryProvider
 from auction_keeper.gas import DynamicGasPrice
+
 
 class CageKeeper:
     """Keeper to facilitate Emergency Shutdown"""
@@ -53,14 +50,11 @@ class CageKeeper:
         parser.add_argument("--rpc-host", type=str, default="https://localhost:8545",
                             help="JSON-RPC host:port (default: 'localhost:8545')")
 
-        parser.add_argument("--rpc-timeout", type=int, default=1200,
-                            help="JSON-RPC timeout (in seconds, default: 10)")
-
-        parser.add_argument("--network", type=str, required=True,
-                            help="Network that you're running the Keeper on (options, 'mainnet', 'kovan', 'testnet')")
+        parser.add_argument("--rpc-timeout", type=int, default=60,
+                            help="JSON-RPC timeout (in seconds, default: 60)")
 
         parser.add_argument('--previous-cage', dest='cageFacilitated', action='store_true',
-                            help='Include this argument if this keeper previously helped to facilitate the processing phase of ES')
+                            help='Include this argument if this keeper previously started the processing phase of ES')
 
         parser.add_argument("--eth-from", type=str, required=True,
                             help="Ethereum address from which to send transactions; checksummed (e.g. '0x12AebC')")
@@ -68,16 +62,17 @@ class CageKeeper:
         parser.add_argument("--eth-key", type=str, nargs='*',
                             help="Ethereum private key(s) to use (e.g. 'key_file=/path/to/keystore.json,pass_file=/path/to/passphrase.txt')")
 
+        parser.add_argument("--psm", type=str, default="",
+                            help="When provided, PSM will be flowed along with other collaterals")
+
         parser.add_argument("--dss-deployment-file", type=str, required=False,
                             help="Json description of all the system addresses (e.g. /Full/Path/To/configFile.json)")
 
         parser.add_argument("--vat-deployment-block", type=int, required=False, default=0,
-                            help=" Block that the Vat from dss-deployment-file was deployed at (e.g. 8836668")
+                            help="Block that the Vat from dss-deployment-file was deployed at (e.g. 8836668")
 
         parser.add_argument("--vulcanize-endpoint", type=str,
-                            help="When specified, frob history will be queried from a VulcanizeDB lite node, "
-                                 "reducing load on the Ethereum node for Vault query")
-
+                            help="When specified, urn history will be queried from Vulcanize, conserving resources")
         parser.add_argument("--vulcanize-key", type=str,
                             help="API key for the Vulcanize endpoint")
 
@@ -93,7 +88,6 @@ class CageKeeper:
         parser.add_argument("--gas-reactive-multiplier", type=str, default=2.25, help="gas strategy tuning")
         parser.add_argument("--gas-maximum", type=str, default=5000, help="gas strategy tuning")
 
-
         parser.set_defaults(cageFacilitated=False)
         self.arguments = parser.parse_args(args)
 
@@ -107,7 +101,7 @@ class CageKeeper:
         if self.arguments.dss_deployment_file:
             self.dss = DssDeployment.from_json(web3=self.web3, conf=open(self.arguments.dss_deployment_file, "r").read())
         else:
-            self.dss = DssDeployment.from_network(web3=self.web3, network=self.arguments.network)
+            self.dss = DssDeployment.from_node(web3=self.web3)
 
         self.deployment_block = self.arguments.vat_deployment_block
 
@@ -124,7 +118,7 @@ class CageKeeper:
         else:
             self.gas_price = DefaultGasPrice()
 
-
+        self.lifecycle = None
         logging.basicConfig(format='%(asctime)-15s %(levelname)-8s %(message)s',
                             level=(logging.DEBUG if self.arguments.debug else logging.INFO))
 
@@ -182,11 +176,12 @@ class CageKeeper:
                 self.facilitate_processing_period()
 
             # wait until processing time concludes
-            elif (now >= thawedCage):
+            elif now >= thawedCage:
                 self.thaw_cage()
-
-                if not (self.arguments.network == 'testnet'):
-                    self.lifecycle.terminate()
+                self.logger.info('')
+                self.logger.info('======== Burning Deposited MKR ========')
+                self.logger.info('')
+                self.dss.esm.burn().transact(gas_price=self.gas_price)
 
             else:
                 whenThawedCage = datetime.utcfromtimestamp(thawedCage)
@@ -205,7 +200,7 @@ class CageKeeper:
         self.logger.info('')
 
         # check ilks
-        ilks = self.get_ilks()
+        ilks = list(map(lambda l: l.ilk, self.get_collaterals()))
 
         # Get all auctions that can be yanked after cage
         auctions = self.all_active_auctions()
@@ -221,7 +216,6 @@ class CageKeeper:
         for key in auctions["clips"].keys():
             ilk = self.dss.vat.ilk(key)
             for bid in auctions["clips"][key]:
-                # FIXME: dss-deploy-scripts isn't deploying this
                 self.dss.end.snip(ilk, bid.id).transact(gas_price=self.gas_price)
 
         # Skip all flip auctions
@@ -243,9 +237,9 @@ class CageKeeper:
         self.logger.info('======== Thawing Cage ========')
         self.logger.info('')
 
-        ilks = self.get_ilks()
+        collaterals = self.get_collaterals()
 
-        # check if Dai is in Vow and annialate it with Heal()
+        # check if Dai is in Vow and annihilate it with Heal()
         dai = self.dss.vat.dai(self.dss.vow.address)
         if dai > Rad(0):
             self.dss.vow.heal(dai).transact(gas_price=self.gas_price)
@@ -254,21 +248,26 @@ class CageKeeper:
         self.dss.end.thaw().transact(gas_price=self.gas_price)
 
         # Set fix (collateral/Dai ratio) for all Ilks
-        for ilk in ilks:
-            self.dss.end.flow(ilk).transact(gas_price=self.gas_price)
+        for collateral in collaterals:
+            self.dss.end.flow(collateral.ilk).transact(gas_price=self.gas_price)
+            if collateral.clipper:
+                self.dss.esm.deny(collateral.clipper.address).transact(gas_price=self.gas_price)
+            if collateral.flipper:
+                self.dss.esm.deny(collateral.flipper.address).transact(gas_price=self.gas_price)
 
-    def get_ilks(self) -> List[Ilk]:
+        # Flow the PSM if configured to do so
+        if self.arguments.psm:
+            self.dss.end.flow(Ilk("PSM-USDC-A")).transact(gas_price=self.gas_price)
+            self.dss.esm.deny(Address(self.arguments.psm)).transact(gas_price=self.gas_price)
+
+    def get_collaterals(self) -> List[Collateral]:
         """ Use Ilks as saved in https://github.com/makerdao/pymaker/tree/master/config """
 
-        ilks = [self.dss.collaterals[key].ilk for key in self.dss.collaterals.keys()]
-        ilksFiltered = list(filter(lambda l: l.name != 'SAI', ilks))
-        ilks_with_debt = list(filter(lambda l: self.dss.vat.ilk(l.name).art > Wad(0), ilksFiltered))
+        collaterals_filtered = filter(lambda l: l.ilk.name != 'SAI', self.dss.collaterals.values())
+        collaterals_with_debt = list(filter(lambda l: self.dss.vat.ilk(l.ilk.name).art > Wad(0), collaterals_filtered))
 
-        ilkNames = [i.name for i in ilks_with_debt]
-
-        self.logger.info(f'Ilks to check: {ilkNames}')
-
-        return ilks_with_debt
+        self.logger.info(f'Collaterals to check: {[c.ilk.name for c in collaterals_with_debt]}')
+        return collaterals_with_debt
 
     def get_underwater_urns(self, ilks: List) -> List[Urn]:
         """ With all urns every frobbed, compile and return a list urns that are under-collateralized up to 100%  """
