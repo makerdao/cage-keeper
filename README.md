@@ -96,6 +96,9 @@ Make a run-cage-keeper.sh to easily spin up the cage-keeper.
   [--vulcanize-endpoint 'http://vdb.sampleendpoint.com:8545/graphql']
 ```
 
+To `flow` the PSM along with other collaterals, pass the `--psm` address.  Current addresses may be obtained from 
+https://github.com/BellwoodStudios/dss-psm .
+
 
 ## Testing
 
