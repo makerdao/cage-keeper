@@ -231,6 +231,24 @@ class CageKeeper:
         for i in urns:
             self.dss.end.skim(i.ilk, i.address).transact(gas_price=self.gas_price)
 
+    def reconcile_debt(self):
+        joy = self.dss.vat.dai(self.dss.vow.address)
+        ash = self.dss.vow.ash()
+        woe = self.dss.vow.woe()
+
+        if ash > Rad(0):
+            if joy > ash:
+                self.dss.vow.kiss(ash).transact(gas_price=self.gas_price)
+            else:
+                self.dss.vow.kiss(joy).transact(gas_price=self.gas_price)
+                return
+        if woe > Rad(0):
+            joy = self.dss.vat.dai(self.dss.vow.address)
+            if joy > woe:
+                self.dss.vow.heal(woe).transact(gas_price=self.gas_price)
+            else:
+                self.dss.vow.heal(joy).transact(gas_price=self.gas_price)
+
     def thaw_cage(self):
         """ Once End.wait is reached, annihilate any lingering Dai in the vow, thaw the cage, and set the fix for all ilks  """
         self.logger.info('')
@@ -239,10 +257,8 @@ class CageKeeper:
 
         collaterals = self.get_collaterals()
 
-        # check if Dai is in Vow and annihilate it with Heal()
-        dai = self.dss.vat.dai(self.dss.vow.address)
-        if dai > Rad(0):
-            self.dss.vow.heal(dai).transact(gas_price=self.gas_price)
+        # reconcile surplus and debt
+        self.reconcile_debt()
 
         # Call thaw and Fix outstanding supply of Dai
         self.dss.end.thaw().transact(gas_price=self.gas_price)
