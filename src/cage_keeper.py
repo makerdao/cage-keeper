@@ -107,6 +107,7 @@ class CageKeeper:
 
         self.max_errors = self.arguments.max_errors
         self.errors = 0
+        self.complete = False
 
         self.cageFacilitated = self.arguments.cageFacilitated
 
@@ -149,7 +150,7 @@ class CageKeeper:
 
     def process_block(self):
         """Callback called on each new block. If too many errors, terminate the keeper to minimize potential damage."""
-        if self.errors >= self.max_errors:
+        if self.complete or self.errors >= self.max_errors:
             self.lifecycle.terminate()
         else:
             self.check_cage()
@@ -178,10 +179,16 @@ class CageKeeper:
             # wait until processing time concludes
             elif now >= thawedCage:
                 self.thaw_cage()
+                joined_mkr = self.dss.esm.sum()
+                if joined_mkr > Wad(0):
+                    self.logger.info('')
+                    self.logger.info(f'======== Burning {float(joined_mkr)} deposited MKR ========')
+                    self.logger.info('')
+                    self.dss.esm.burn().transact(gas_price=self.gas_price)
                 self.logger.info('')
-                self.logger.info('======== Burning Deposited MKR ========')
+                self.logger.info('======== Completed emergency shutdown ========')
                 self.logger.info('')
-                self.dss.esm.burn().transact(gas_price=self.gas_price)
+                self.complete = True
 
             else:
                 whenThawedCage = datetime.utcfromtimestamp(thawedCage)
@@ -191,10 +198,10 @@ class CageKeeper:
 
         elif not live and self.confirmations < 13:
             self.confirmations = self.confirmations + 1
-            self.logger.info(f'======== System has been caged ( {self.confirmations} confirmations) ========')
+            self.logger.info(f'======== System has been caged ({self.confirmations} confirmations) ========')
 
     def facilitate_processing_period(self):
-        """ Yank all active flap/flop auctions, cage all ilks, skip all flip auctions, skim all underwater urns  """
+        """ Yank active flap/flop auctions, cage ilks, snip clip auctions, skip flip auctions, skim underwater urns """
         self.logger.info('')
         self.logger.info('======== Facilitating Cage ========')
         self.logger.info('')
@@ -224,12 +231,8 @@ class CageKeeper:
             for bid in auctions["flips"][key]:
                 self.dss.end.skip(ilk, bid.id).transact(gas_price=self.gas_price)
 
-        # get all underwater urns
-        urns = self.get_underwater_urns(ilks)
-
-        # skim all underwater urns
-        for i in urns:
-            self.dss.end.skim(i.ilk, i.address).transact(gas_price=self.gas_price)
+        # Cancel vault debt, confiscating backing collateral
+        self.skim_urns(ilks, undercollateralized_only=True)
 
     def reconcile_debt(self):
         joy = self.dss.vat.dai(self.dss.vow.address)
@@ -249,6 +252,42 @@ class CageKeeper:
             else:
                 self.dss.vow.heal(joy).transact(gas_price=self.gas_price)
 
+    def skim_urns(self, ilks: List, undercollateralized_only: bool):
+        """ Skim each urn to cancel debt """
+
+        for ilk in ilks:
+            if self.arguments.vulcanize_endpoint:
+                urn_history = VulcanizeUrnHistoryProvider(self.web3, self.dss, ilk,
+                                                          self.arguments.vulcanize_endpoint,
+                                                          self.arguments.vulcanize_key)
+            else:
+                urn_history = ChainUrnHistoryProvider(self.web3, self.dss, ilk, self.deployment_block)
+            urns = urn_history.get_urns()
+            self.logger.info(f'Collected {len(urns)} urns from {ilk}')
+
+            for count, urn in enumerate(urns.values()):
+                # ignore vaults with no debt
+                if urn.art == Wad(0):
+                    continue
+                # while facilitating the processing period, only underwater vaults will be confiscated
+                if undercollateralized_only:
+                    mat = self.dss.spotter.mat(urn.ilk)
+                    usd_debt = Ray(urn.art) * urn.ilk.rate
+                    usd_collateral = Ray(urn.ink) * urn.ilk.spot * mat
+                    # Check if underwater ->  urn.art * ilk.rate > urn.ink * ilk.spot * spotter.mat[ilk]
+                    if usd_debt < usd_collateral:
+                        continue
+
+                self.dss.end.skim(urn.ilk, urn.address).transact(gas_price=self.gas_price)
+                if count % 50 == 0:
+                    self.logger.info(f'Submitted skim transactions for {count} of {len(urns)} {ilk.name} urns')
+                    # after the processing period, check whether we've skimmed enough to cover the surplus
+                    if not undercollateralized_only:
+                        self.reconcile_debt()
+                        if self.dss.vat.dai(self.dss.vow.address) == Rad(0):
+                            self.logger.info(f'Enough urns were skimmed to eliminate surplus')
+                            break
+
     def thaw_cage(self):
         """ Once End.wait is reached, annihilate any lingering Dai in the vow, thaw the cage, and set the fix for all ilks  """
         self.logger.info('')
@@ -257,11 +296,14 @@ class CageKeeper:
 
         collaterals = self.get_collaterals()
 
-        # reconcile surplus and debt
+        # Reconcile surplus and debt to reduce joy, skim as necessary until surplus is eliminated
         self.reconcile_debt()
+        if self.dss.vat.dai(self.dss.vow.address) > Rad(0):
+            ilks = list(map(lambda l: l.ilk, self.get_collaterals()))
+            self.skim_urns(ilks, undercollateralized_only=True)
 
         # Call thaw and Fix outstanding supply of Dai
-        self.dss.end.thaw().transact(gas_price=self.gas_price)
+        assert self.dss.end.thaw().transact(gas_price=self.gas_price)
 
         # Set fix (collateral/Dai ratio) for all Ilks
         for collateral in collaterals:
@@ -284,39 +326,6 @@ class CageKeeper:
 
         self.logger.info(f'Collaterals to check: {[c.ilk.name for c in collaterals_with_debt]}')
         return collaterals_with_debt
-
-    def get_underwater_urns(self, ilks: List) -> List[Urn]:
-        """ With all urns every frobbed, compile and return a list urns that are under-collateralized up to 100%  """
-
-        underwater_urns = []
-
-        for ilk in ilks:
-
-            if self.arguments.vulcanize_endpoint:
-                urn_history = VulcanizeUrnHistoryProvider(self.web3, self.dss, ilk,
-                                                          self.arguments.vulcanize_endpoint,
-                                                          self.arguments.vulcanize_key)
-            else:
-                urn_history = ChainUrnHistoryProvider(self.web3, self.dss, ilk, self.deployment_block)
-            urns = urn_history.get_urns()
-
-            self.logger.info(f'Collected {len(urns)} from {ilk}')
-
-            i = 0
-            for urn in urns.values():
-                urn.ilk = self.dss.vat.ilk(urn.ilk.name)
-                mat = self.dss.spotter.mat(urn.ilk)
-                usdDebt = Ray(urn.art) * urn.ilk.rate
-                usdCollateral = Ray(urn.ink) * urn.ilk.spot * mat
-                # Check if underwater ->  urn.art * ilk.rate > urn.ink * ilk.spot * spotter.mat[ilk]
-                if usdDebt > usdCollateral:
-                    underwater_urns.append(urn)
-                i += 1;
-
-                if i % 100 == 0:
-                    self.logger.info(f'Processed {i} urns of {ilk.name}')
-
-        return underwater_urns
 
     def all_active_auctions(self) -> dict:
         """ Aggregates active auctions that meet criteria to be called after Cage """

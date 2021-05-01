@@ -321,28 +321,6 @@ class TestCageKeeper:
         print_out("test_check_deployment")
         keeper.check_deployment()
 
-    def test_get_underwater_urns(self, mcd: DssDeployment, keeper: CageKeeper, guy_address: Address, our_address: Address):
-        print_out("test_get_underwater_urns")
-
-        previous_eth_price = open_underwater_urn(mcd, mcd.collaterals['ETH-A'], guy_address)
-        open_vault(mcd, mcd.collaterals['ETH-C'], our_address)
-
-        ilks = list(map(lambda l: l.ilk, keeper.get_collaterals()))
-        assert len(ilks) >= 2
-
-        urns = keeper.get_underwater_urns(ilks)
-        assert type(urns) is list
-        assert all(isinstance(x, Urn) for x in urns)
-        assert len(urns) == 1
-        assert urns[0].address.address == guy_address.address
-
-        ## We've multiplied by a small Ray amount to counteract
-        ## the residual dust (or lack thereof) in this step that causes
-        ## create_flop_auction fail
-        set_collateral_price(mcd, mcd.collaterals['ETH-A'], Wad(previous_eth_price * Ray.from_number(1.0001)))
-
-        pytest.global_urns = urns
-
     def test_get_collaterals(self, mcd: DssDeployment, keeper: CageKeeper):
         print_out("test_get_collaterals")
 
