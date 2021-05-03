@@ -76,9 +76,6 @@ class CageKeeper:
         parser.add_argument("--vulcanize-key", type=str,
                             help="API key for the Vulcanize endpoint")
 
-        parser.add_argument("--max-errors", type=int, default=100,
-                            help="Maximum number of allowed errors before the keeper terminates (default: 100)")
-
         parser.add_argument("--debug", dest='debug', action='store_true',
                             help="Enable debug output")
 
@@ -104,13 +101,8 @@ class CageKeeper:
             self.dss = DssDeployment.from_node(web3=self.web3)
 
         self.deployment_block = self.arguments.vat_deployment_block
-
-        self.max_errors = self.arguments.max_errors
-        self.errors = 0
         self.complete = False
-
         self.cageFacilitated = self.arguments.cageFacilitated
-
         self.confirmations = 0
 
         # Create gas strategy
@@ -149,8 +141,8 @@ class CageKeeper:
         self.logger.info('')
 
     def process_block(self):
-        """Callback called on each new block. If too many errors, terminate the keeper to minimize potential damage."""
-        if self.complete or self.errors >= self.max_errors:
+        """Callback called on each new block."""
+        if self.complete:
             self.lifecycle.terminate()
         else:
             self.check_cage()
@@ -217,7 +209,7 @@ class CageKeeper:
 
         # Cage all ilks
         for ilk in ilks:
-            self.dss.end.cage(ilk).transact(gas_price=self.gas_price)
+            assert self.dss.end.cage(ilk).transact(gas_price=self.gas_price)
 
         # Snip all clip auctions
         for key in auctions["clips"].keys():
