@@ -292,7 +292,7 @@ class CageKeeper:
         self.reconcile_debt()
         if self.dss.vat.dai(self.dss.vow.address) > Rad(0):
             ilks = list(map(lambda l: l.ilk, self.get_collaterals()))
-            self.skim_urns(ilks, undercollateralized_only=True)
+            self.skim_urns(ilks, undercollateralized_only=False)
 
         # Call thaw and Fix outstanding supply of Dai
         assert self.dss.end.thaw().transact(gas_price=self.gas_price)
