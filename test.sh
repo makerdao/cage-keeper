@@ -5,6 +5,7 @@ docker pull makerdao/testchain-pymaker:unit-testing
 
 # Start the docker image and wait for parity to initialize
 pushd ./lib/pymaker
+pushd ./lib/pymaker
 docker-compose up -d
 sleep 2
 popd
