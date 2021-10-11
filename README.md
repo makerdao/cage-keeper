@@ -1,6 +1,6 @@
 # cage-keeper
 
-[![Build Status](https://travis-ci.org/makerdao/cage-keeper.svg?branch=master)](https://travis-ci.org/makerdao/cage-keeper)
+![Build Status](https://github.com/makerdao/cage-keeper/actions/workflows/.github/workflows/tests.yaml/badge.svg?branch=master)
 [![codecov](https://codecov.io/gh/makerdao/cage-keeper/branch/master/graph/badge.svg)](https://codecov.io/gh/makerdao/cage-keeper)
 
 The `cage-keeper` is used to help facilitate [Emergency Shutdown](https://blog.makerdao.com/introduction-to-emergency-shutdown-in-multi-collateral-dai/) of the [Maker Protocol](https://github.com/makerdao/dss). Emergency shutdown is an involved, deterministic process, requiring interaction from all user types: Vault owners, Dai holders, Redemption keepers, MKR governors, and other Maker Protocol Stakeholders. A high level overview is as follows:
