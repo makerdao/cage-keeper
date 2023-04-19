@@ -13,6 +13,7 @@ git clone git@github.com:makerdao/cage-keeper.git
 cd cage-keeper
 git submodule update --init --recursive
 ```
+Note: To get gas prices from Etherscan or Blocknative, checkout the master branch code for the auction-keeper, and pygasprice_client submodules
 
 ## Configure, Build and Run:
 
@@ -31,11 +32,8 @@ BLOCKCHAIN_NETWORK=
 # Account used to pay for gas
 ETH_FROM_ADDRESS=
 
-# URL of Vulcanize instance to use
-VULCANIZE_URL=
-
 # ETH Gas Station API key
-ETH_GASSTATION_API_KEY=
+ETHERSCAN_API_KEY=
 
 # For ease of use, do not change the location of ETH account keys, note that account files should always be placed in the secrets directory of the cage-keeper, and files named as indicated.
 ETH_ACCOUNT_KEY='key_file=/opt/keeper/cage-keeper/secrets/keystore.json,pass_file=/opt/keeper/cage-keeper/secrets/password.txt'
