@@ -34,13 +34,11 @@ class SmartGasPrice(GasStrategy):
         self.etherscan = Aggregator(refresh_interval=60, expiry=600,
                                       etherscan_api_key=api_key,
                                       blocknative_api_key=blocknative_api_key)
-        print(f"xxxx {self.etherscan}")
 
     # if etherscan retruns None 3x in a row, try the next api
 
 
     def get_gas_price(self, time_elapsed: int) -> Optional[int]:
-        print("HERE 1")
         # start with standard price plus backup in case EtherscanAPI is down, then do fast
         if 0 <= time_elapsed <= 240:
             standard_price = self.etherscan.standard_price()
@@ -59,7 +57,6 @@ class SmartGasPrice(GasStrategy):
 
     # default gas pricing when EtherscanAPI feed is down
     def default_gas_pricing(self, time_elapsed: int):
-        print("HERE 2")
         return GeometricGasPrice(initial_price=5*self.GWEI,
                                   increase_by=10*self.GWEI,
                                   every_secs=60,
