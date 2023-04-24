@@ -13,6 +13,13 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Checkout master of submodiles
+      run: |
+        cd lib/auction-keeper && git checkout master
+        cd ../lib/pygasprice-client && git checkout master
+        cd ../lib/pymaker && git checkout master
+        cd ../..
+
     - name: setup python
       uses: actions/setup-python@v4
       with:
