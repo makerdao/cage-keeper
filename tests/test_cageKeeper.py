@@ -281,9 +281,11 @@ pytest.global_auctions = {}
 class TestCageKeeper:
 
     def test_check_deployment(self, mcd: DssDeployment, keeper: CageKeeper):
+        print_out("test_check_deployment")
         keeper.check_deployment()
 
     def test_get_underwater_urns(self, mcd: DssDeployment, keeper: CageKeeper, guy_address: Address, our_address: Address):
+        print_out("test_get_underwater_urns")
 
         previous_eth_price = open_underwater_urn(mcd, mcd.collaterals['ETH-A'], guy_address)
         open_vault(mcd, mcd.collaterals['ETH-C'], our_address)
@@ -304,6 +306,7 @@ class TestCageKeeper:
         pytest.global_urns = urns
 
     def test_get_ilks(self, mcd: DssDeployment, keeper: CageKeeper):
+        print_out("test_get_ilks")
 
         ilks = keeper.get_ilks()
         assert type(ilks) is list
@@ -315,6 +318,7 @@ class TestCageKeeper:
         assert all(elem not in empty_deploymentIlks for elem in ilks)
 
     def test_active_auctions(self, mcd: DssDeployment, keeper: CageKeeper, our_address: Address, other_address: Address, deployment_address: Address):
+        print_out("test_active_auctions")
         print(f"Sin: {mcd.vat.sin(mcd.vow.address)}")
         print(f"Dai: {mcd.vat.dai(mcd.vow.address)}")
 
@@ -355,6 +359,7 @@ class TestCageKeeper:
         pytest.global_auctions = auctions
 
     def test_check_cage(self, mcd: DssDeployment, keeper: CageKeeper, our_address: Address, other_address: Address):
+        print_out("test_check_cage")
         keeper.check_cage()
         assert keeper.cageFacilitated == False
         assert mcd.end.live() == 1
@@ -382,6 +387,7 @@ class TestCageKeeper:
         keeper.check_cage() # Facilitate cooldown (thawing cage)
 
     def test_cage_keeper(self, mcd: DssDeployment, keeper: CageKeeper, our_address: Address, other_address: Address):
+        print_out("test_cage_keeper")
         ilks = keeper.get_ilks()
         urns = pytest.global_urns
         auctions = pytest.global_auctions
