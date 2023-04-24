@@ -246,7 +246,7 @@ def prepare_esm(mcd: DssDeployment, our_address: Address):
     assert isinstance(mcd.esm.address, Address)
     assert mcd.esm.sum() == Wad(0)
     assert mcd.esm.min() > Wad(0)
-    #assert not mcd.esm.fire()
+    assert not mcd.esm.fire()
 
     assert mcd.mkr.approve(mcd.esm.address).transact()
 
@@ -394,7 +394,7 @@ class TestCageKeeper:
 
         for ilk in ilks:
             # Check if cage(ilk) called on all ilks
-            assert mcd.end.tag(ilk) >= Ray(0)
+            assert mcd.end.tag(ilk) > Ray(0)
 
             # Check if flow(ilk) called on all ilks
             print(f'mcd.end.fix(ilk): {mcd.end.fix(ilk)}')
