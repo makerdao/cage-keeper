@@ -107,7 +107,7 @@ def mcd(web3) -> DssDeployment:
 
 @pytest.fixture(scope="session")
 def keeper(mcd: DssDeployment, keeper_address: Address) -> CageKeeper:
-    keeper = CageKeeper(args=args(f"--eth-from {keeper_address} --network testnet --vat-deployment-block {1}"), web3=mcd.web3)
+    keeper = CageKeeper(args=args(f"--eth-from {keeper_address} --vat-deployment-block {1}"), web3=mcd.web3)
     assert isinstance(keeper, CageKeeper)
 
     return keeper

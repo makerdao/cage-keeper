@@ -25,7 +25,7 @@ To be consistent with the Protocol's technical terminology for the rest of this 
 
 The central goal of the `cage-keeper` is to process all under-collateralized `urns`. This accounting step is performed within `End.skim()`, and since it is surrounded by other required/important steps in the Emergency Shutdown, a first iteration of this keeper will help to call most of the other public function calls within the `End` contract.
 
-As can be seen in the above flowchart, the keeper checks if the system has been caged before attempting to `skim` all underwater urns and `skip` all flip auctions. After the processing period has been facilitated and the `End.wait` waittime has been reached, it will transition the system into the Dai redemption phase of Emergency Shutdown by calling `End.thaw()` and `End.flow()`. This first iteration of this keeper is naive, as it assumes it's the only keeper and attempts to account for all urns, ilks, and auctions. Because of this, it's important that the keeper's address has enough ETH to cover the gas costs involved with sending numerous transactions. Any transaction that attempts to call a function that's already been invoked by another Keeper/user would simply fail.
+As can be seen in the above flowchart, the keeper checks if the system has been caged before attempting to `skim` all underwater urns, `snip` all clip auctions, and `skip` all flip auctions. After the processing period has been facilitated and the `End.wait` waittime has been reached, it will transition the system into the Dai redemption phase of Emergency Shutdown by calling `End.thaw()` and `End.flow()`. This first iteration of this keeper is naive, as it assumes it's the only keeper and attempts to account for all urns, ilks, and auctions. Because of this, it's important that the keeper's address has enough ETH to cover the gas costs involved with sending numerous transactions. Any transaction that attempts to call a function that's already been invoked by another Keeper/user would simply fail.
 
 
 ## Operation
@@ -39,6 +39,7 @@ The keeper's ethereum address should have enough ETH to cover gas costs and is a
 min_ETH = average_gasPrice * [ ( Flopper.yank()_gas * #_of_Flop_Auctions     ) +
                                ( Flapper.yank()_gas * #_of_Flap_Auctions     ) +
                                ( End.cage(Ilk)_gas  * #_of_Collateral_Types  ) +
+                               ( End.snip()_gas     * #_of_Clip_Auctions     ) +
                                ( End.skip()_gas     * #_of_Flip_Auctions     ) +
                                ( End.skim()_gas     * #_of_Underwater_Vaults ) +
                                ( Vow.heal()_gas                              ) +
@@ -94,6 +95,9 @@ Make a run-cage-keeper.sh to easily spin up the cage-keeper.
 	--vat-deployment-block 14374534 \
   [--vulcanize-endpoint 'http://vdb.sampleendpoint.com:8545/graphql']
 ```
+
+To `flow` the PSM along with other collaterals, pass the `--psm` address.  Current addresses may be obtained from 
+https://github.com/BellwoodStudios/dss-psm .
 
 
 ## Testing
