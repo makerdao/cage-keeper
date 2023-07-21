@@ -1,0 +1,76 @@
+replicaCount: 1
+service:
+  name: cage-keeper
+  port: 8080
+  type: ClusterIP
+  containerPort: 8080
+  tls:
+    enabled: false
+image:
+  pullPolicy: Always
+serviceAccount:
+  create: false
+ingress:
+  enabled: false
+podAnnotations:
+  reloader.stakater.com/auto: "true"
+resources:
+  limits:
+    cpu: 500m
+    memory: 1024Mi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+autoscaling:
+  enabled: false
+env:
+  ETH_FROM_ADDRESS:
+    type: parameterStore
+    name: eth-from-addr-mainnet
+    parameter_name: /eks/maker-prod/cage-keeper/eth-from-addr-mainnet
+  ETH_GASSTATION_API_KEY:
+    type: parameterStore
+    name: eth-gasstation-api-key
+    parameter_name: /eks/maker-prod/cage-keeper/eth-gasstation-api-key
+  SECRET_KEY:
+    type: parameterStore
+    name: secret-key-mainnet
+    parameter_name: /eks/maker-prod/cage-keeper/secret-key-mainnet
+  SECRET_PASS:
+    type: parameterStore
+    name: secret-pass-mainnet
+    parameter_name: /eks/maker-prod/cage-keeper/secret-pass-mainnet
+  VULCANIZE_KEY:
+    type: parameterStore
+    name: vulcanize-key
+    parameter_name: /eks/maker-prod/cage-keeper/vulcanize-key
+  SERVER_ETH_RPC_HOST:
+    type: kv
+    value: https://geth1.mainnet.makerops.services/rpc
+  BLOCKCHAIN_NETWORK:
+    type: kv
+    value: mainnet
+  VULCANIZE_URL:
+    type: kv
+    value: https://api.makerdao.com/graphql
+  ETH_ACCOUNT_KEY:
+    type: kv
+    value: "key_file=/opt/keeper/cage-keeper/secrets/keystore.json,pass_file=/opt/keeper/cage-keeper/secrets/password.txt"
+externalSecrets:
+  clusterSecretStoreName: maker-prod
+livenessProbe:
+  exec:
+    command:
+      - /bin/sh
+      - -c
+      - ps -ef | grep cage-keeper
+  initialDelaySeconds: 5
+  periodSeconds: 30
+readinessProbe:
+  exec:
+    command:
+      - /bin/sh
+      - -c
+      - ps -ef | grep cage-keeper
+  initialDelaySeconds: 5
+  periodSeconds: 30
