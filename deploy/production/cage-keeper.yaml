@@ -13,7 +13,7 @@ serviceAccount:
 ingress:
   enabled: false
 podAnnotations:
-  reloader.stakater.com/auto: "true"
+  reloader.stakater.com/auto: 'true'
 resources:
   limits:
     cpu: 500m
@@ -46,7 +46,7 @@ env:
     parameter_name: /eks/maker-prod/cage-keeper/vulcanize-key
   SERVER_ETH_RPC_HOST:
     type: kv
-    value: https://geth1.mainnet.makerops.services/rpc
+    value: https://geth3.mainnet.makerops.services/rpc
   BLOCKCHAIN_NETWORK:
     type: kv
     value: mainnet
@@ -55,7 +55,7 @@ env:
     value: https://api.makerdao.com/graphql
   ETH_ACCOUNT_KEY:
     type: kv
-    value: "key_file=/opt/keeper/cage-keeper/secrets/keystore.json,pass_file=/opt/keeper/cage-keeper/secrets/password.txt"
+    value: 'key_file=/opt/keeper/cage-keeper/secrets/keystore.json,pass_file=/opt/keeper/cage-keeper/secrets/password.txt'
 externalSecrets:
   clusterSecretStoreName: maker-prod
 livenessProbe:
