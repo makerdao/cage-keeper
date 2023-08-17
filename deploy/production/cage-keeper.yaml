@@ -46,7 +46,7 @@ env:
     parameter_name: /eks/maker-prod/cage-keeper/vulcanize-key
   SERVER_ETH_RPC_HOST:
     type: kv
-    value: https://geth1.mainnet.makerops.services/rpc
+    value: https://geth3.mainnet.makerops.services/rpc
   BLOCKCHAIN_NETWORK:
     type: kv
     value: mainnet
