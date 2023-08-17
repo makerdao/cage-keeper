@@ -13,7 +13,7 @@ serviceAccount:
 ingress:
   enabled: false
 podAnnotations:
-  reloader.stakater.com/auto: 'true'
+  reloader.stakater.com/auto: "true"
 resources:
   limits:
     cpu: 500m
@@ -55,7 +55,7 @@ env:
     value: https://api.makerdao.com/graphql
   ETH_ACCOUNT_KEY:
     type: kv
-    value: 'key_file=/opt/keeper/cage-keeper/secrets/keystore.json,pass_file=/opt/keeper/cage-keeper/secrets/password.txt'
+    value: "key_file=/opt/keeper/cage-keeper/secrets/keystore.json,pass_file=/opt/keeper/cage-keeper/secrets/password.txt"
 externalSecrets:
   clusterSecretStoreName: maker-prod
 livenessProbe:
