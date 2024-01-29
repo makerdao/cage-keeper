@@ -27,7 +27,6 @@ from typing import List
 from web3 import Web3
 
 from pymaker import Address, web3_via_http
-from pymaker.gas import DefaultGasPrice, FixedGasPrice
 from pymaker.auctions import Flipper, Flapper, Flopper
 from pymaker.keys import register_keys
 from pymaker.lifecycle import Lifecycle
@@ -36,8 +35,9 @@ from pymaker.token import ERC20Token
 from pymaker.deployment import DssDeployment
 from pymaker.dss import Ilk, Urn
 
-from auction_keeper.urn_history import UrnHistory
-from auction_keeper.gas import DynamicGasPrice
+from auction_keeper.urn_history import ChainUrnHistoryProvider
+
+from src.gas_factory import GasPriceFactory
 
 class CageKeeper:
     """Keeper to facilitate Emergency Shutdown"""
@@ -73,25 +73,19 @@ class CageKeeper:
         parser.add_argument("--vat-deployment-block", type=int, required=False, default=0,
                             help=" Block that the Vat from dss-deployment-file was deployed at (e.g. 8836668")
 
-        parser.add_argument("--vulcanize-endpoint", type=str,
-                            help="When specified, frob history will be queried from a VulcanizeDB lite node, "
-                                 "reducing load on the Ethereum node for Vault query")
-
-        parser.add_argument("--vulcanize-key", type=str,
-                            help="API key for the Vulcanize endpoint")
-
         parser.add_argument("--max-errors", type=int, default=100,
                             help="Maximum number of allowed errors before the keeper terminates (default: 100)")
 
         parser.add_argument("--debug", dest='debug', action='store_true',
                             help="Enable debug output")
 
-        parser.add_argument("--ethgasstation-api-key", type=str, default=None, help="ethgasstation API key")
+        parser.add_argument("--etherscan-api-key", type=str, default=None, help="etherscan API key")
 
-        parser.add_argument("--gas-initial-multiplier", type=str, default=1.0, help="ethgasstation API key")
-        parser.add_argument("--gas-reactive-multiplier", type=str, default=2.25, help="gas strategy tuning")
-        parser.add_argument("--gas-maximum", type=str, default=5000, help="gas strategy tuning")
+        parser.add_argument('--gas-price', type=float, default=None,
+                            help="Uses a fixed value (in Gwei) instead of an external API to determine initial gas")
 
+        parser.add_argument("--smart-gas-price", dest='smart_gas_price', action='store_true',
+                            help="Use smart gas pricing strategy, based on the ethgasstation.info feed")
 
 
         parser.set_defaults(cageFacilitated=False)
@@ -118,11 +112,7 @@ class CageKeeper:
 
         self.confirmations = 0
 
-        # Create gas strategy
-        if self.arguments.ethgasstation_api_key:
-            self.gas_price = DynamicGasPrice(self.arguments, self.web3)
-        else:
-            self.gas_price = DefaultGasPrice()
+        self.gas_price = GasPriceFactory().create_gas_price(self.arguments, self.web3)
 
 
         logging.basicConfig(format='%(asctime)-15s %(levelname)-8s %(message)s',
@@ -154,6 +144,7 @@ class CageKeeper:
         self.logger.info(f'Jug: {self.dss.jug.address}')
         self.logger.info(f'End: {self.dss.end.address}')
         self.logger.info('')
+        self.logger.info(f'gas price is: {self.gas_price}')
 
 
     def process_block(self):
@@ -278,12 +269,10 @@ class CageKeeper:
 
         for ilk in ilks:
 
-            urn_history = UrnHistory(self.web3,
+            urn_history = ChainUrnHistoryProvider(self.web3,
                                      self.dss,
                                      ilk,
-                                     self.deployment_block,
-                                     self.arguments.vulcanize_endpoint,
-                                     self.arguments.vulcanize_key)
+                                     self.deployment_block)
 
             urns = urn_history.get_urns()
 
@@ -356,4 +345,5 @@ class CageKeeper:
 
 
 if __name__ == '__main__':
+    logging.basicConfig(format='%(asctime)-15s %(levelname)-8s %(message)s', level=logging.INFO)
     CageKeeper(sys.argv[1:]).main()

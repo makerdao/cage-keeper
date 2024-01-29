@@ -5,13 +5,16 @@ RUN groupadd -r keeper && useradd -d /home/keeper -m --no-log-init -r -g keeper 
     apt-get -y install jq bc && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /opt/keeper
-
-RUN git clone https://github.com/makerdao/cage-keeper.git && \
-    cd cage-keeper && \
-    git submodule update --init --recursive && \
-    pip3 install virtualenv && \
-    ./install.sh
+COPY bin /opt/keeper/cage-keeper/bin
+COPY lib /opt/keeper/cage-keeper/lib
+COPY src /opt/keeper/cage-keeper/src
+COPY install.sh /opt/keeper/cage-keeper/install.sh
+COPY run-cage-keeper.sh /opt/keeper/cage-keeper/run-cage-keeper.sh
+COPY requirements.txt /opt/keeper/cage-keeper/requirements.txt
 
 WORKDIR /opt/keeper/cage-keeper
+RUN pip3 install virtualenv && \
+    ./install.sh
+
+
 CMD ["./run-cage-keeper.sh"]

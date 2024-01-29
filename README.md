@@ -76,6 +76,7 @@ cd cage-keeper
 git submodule update --init --recursive
 ./install.sh
 ```
+Note: To get gas prices from Etherscan or Blocknative, checkout the master branch code for the auction-keeper, and pygasprice_client submodules
 
 For some known Ubuntu and macOS issues see the [pymaker](https://github.com/makerdao/pymaker) README.
 
