@@ -41,5 +41,4 @@ exec $dir/bin/cage-keeper \
   --eth-from "${ETH_FROM_ADDRESS}" \
   --eth-key "${ETH_ACCOUNT_KEY}" \
   --vulcanize-endpoint "${VULCANIZE_URL}" \
-  --vulcanize-key "${VULCANIZE_KEY}" \
-  --ethgasstation-api-key "${ETH_GASSTATION_API_KEY}"
+  --vulcanize-key "${VULCANIZE_KEY}"
