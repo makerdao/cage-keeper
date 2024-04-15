@@ -2,7 +2,6 @@ on:
   push:
     branches:
       - master
-      - remove-gasstation-api-key
 
 name: Build Docker image and deploy it to Kubernetes cluster
 
