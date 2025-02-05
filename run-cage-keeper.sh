@@ -34,12 +34,11 @@ then
 
 fi
 
-
+# remove the --smart-gas-price flag to get gas prices from the node
 exec $dir/bin/cage-keeper \
   --rpc-host "${SERVER_ETH_RPC_HOST}" \
   --network "${BLOCKCHAIN_NETWORK}" \
   --eth-from "${ETH_FROM_ADDRESS}" \
   --eth-key "${ETH_ACCOUNT_KEY}" \
-  --vulcanize-endpoint "${VULCANIZE_URL}" \
-  --vulcanize-key "${VULCANIZE_KEY}" \
-  --ethgasstation-api-key "${ETH_GASSTATION_API_KEY}"
+  --etherscan-api-key "${ETHERSCAN_API_KEY}" \
+  --smart-gas-price
