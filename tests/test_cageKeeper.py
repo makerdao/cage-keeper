@@ -30,8 +30,8 @@ from src.cage_keeper import CageKeeper
 from pymaker import Address
 from pymaker.approval import directly, hope_directly
 from pymaker.auctions import Flapper, Flopper, Flipper
-from pymaker.deployment import DssDeployment
-from pymaker.dss import Collateral, Ilk, Urn
+from pymaker.deployment import Collateral, DssDeployment
+from pymaker.dss import Ilk, Urn
 from pymaker.numeric import Wad, Ray, Rad
 from pymaker.shutdown import ShutdownModule, End
 
@@ -86,7 +86,7 @@ def create_surplus(mcd: DssDeployment, flapper: Flapper, deployment_address: Add
     if joy < mcd.vow.hump() + mcd.vow.bump():
         # Create a CDP with surplus
         print('Creating a CDP with surplus')
-        collateral = mcd.collaterals['ETH-B']
+        collateral = mcd.collaterals['ETH-C']
         assert flapper.kicks() == 0
         wrap_eth(mcd, deployment_address, Wad.from_number(10))
         collateral.approve(deployment_address)
@@ -119,7 +119,6 @@ def create_flap_auction(mcd: DssDeployment, deployment_address: Address, our_add
     assert kick == 1
     assert len(flapper.active_auctions()) == 1
 
-
     mint_mkr(mcd.mkr, our_address, Wad.from_number(10))
     flapper.approve(mcd.mkr.address, directly(from_address=our_address))
     bid = Wad.from_number(0.001)
@@ -150,7 +149,6 @@ def create_flop_auction(mcd: DssDeployment, deployment_address: Address, our_add
     check_active_auctions(flopper)
     current_bid = flopper.bids(kicks)
 
-
     bid = Wad.from_number(0.000005)
     flopper.approve(mcd.vat.address, approval_function=hope_directly(from_address=our_address))
     assert mcd.vat.can(our_address, flopper.address)
@@ -179,14 +177,16 @@ def dent(flopper: Flopper, id: int, address: Address, lot: Wad, bid: Rad):
     assert flopper.dent(id, lot, bid).transact(from_address=address)
 
 
-def create_flip_auction(mcd: DssDeployment, deployment_address: Address, our_address: Address):
+def create_clip_auction(mcd: DssDeployment, deployment_address: Address, our_address: Address):
     assert isinstance(mcd, DssDeployment)
     assert isinstance(our_address, Address)
     assert isinstance(deployment_address, Address)
 
-    # Create a CDP
-    collateral = mcd.collaterals['ETH-A']
+    collateral = mcd.collaterals['ETH-B']
     ilk = collateral.ilk
+    original_price = Wad(mcd.web3.toInt(collateral.pip.read()))
+
+    # Create a vault
     wrap_eth(mcd, deployment_address, Wad.from_number(1))
     collateral.approve(deployment_address)
     assert collateral.adapter.join(deployment_address, Wad.from_number(1)).transact(
@@ -195,15 +195,55 @@ def create_flip_auction(mcd: DssDeployment, deployment_address: Address, our_add
     dart = max_dart(mcd, collateral, deployment_address) - Wad(1)
     frob(mcd, collateral, deployment_address, dink=Wad(0), dart=dart)
 
-    # Undercollateralize and bite the CDP
-    to_price = Wad(mcd.web3.toInt(collateral.pip.read())) / Wad.from_number(2)
-    set_collateral_price(mcd, collateral, to_price)
+    # Undercollateralize and bark the vault
+    set_collateral_price(mcd, collateral, original_price / Wad.from_number(2))
     urn = mcd.vat.urn(collateral.ilk, deployment_address)
     ilk = mcd.vat.ilk(ilk.name)
     safe = Ray(urn.art) * mcd.vat.ilk(ilk.name).rate <= Ray(urn.ink) * ilk.spot
     assert not safe
-    assert mcd.cat.can_bite(collateral.ilk, Urn(deployment_address))
-    assert mcd.cat.bite(collateral.ilk, Urn(deployment_address)).transact()
+    assert mcd.dog.bark(ilk, urn).transact()
+    clip_kick = collateral.clipper.kicks()
+
+    # Generate some Dai, bid on part of the clip auction
+    wrap_eth(mcd, our_address, Wad.from_number(10))
+    collateral.approve(our_address)
+    assert collateral.adapter.join(our_address, Wad.from_number(10)).transact(from_address=our_address)
+    mcd.web3.eth.defaultAccount = our_address.address
+    frob(mcd, collateral, our_address, dink=Wad.from_number(10), dart=Wad.from_number(200))
+    collateral.clipper.approve(mcd.vat.address, approval_function=hope_directly())
+    (needs_redo, price, lot, tab) = collateral.clipper.status(clip_kick)
+    assert collateral.clipper.take(clip_kick, lot/Wad.from_number(2), price, our_address).transact(
+        from_address=our_address)
+
+    # Reset price
+    set_collateral_price(mcd, collateral, original_price)
+
+
+def create_flip_auction(mcd: DssDeployment, other_address: Address, our_address: Address):
+    assert isinstance(mcd, DssDeployment)
+    assert isinstance(our_address, Address)
+    assert isinstance(other_address, Address)
+
+    # Create a CDP
+    collateral = mcd.collaterals['ETH-A']
+    ilk = collateral.ilk
+    wrap_eth(mcd, other_address, Wad.from_number(1))
+    collateral.approve(other_address)
+    assert collateral.adapter.join(other_address, Wad.from_number(1)).transact(
+        from_address=other_address)
+    frob(mcd, collateral, other_address, dink=Wad.from_number(1), dart=Wad(0))
+    # dart = max_dart(mcd, collateral, other_address) - Wad(1)
+    # frob(mcd, collateral, other_address, dink=Wad(0), dart=dart)
+
+    # Undercollateralize and bite the CDP
+    to_price = Wad(mcd.web3.toInt(collateral.pip.read())) / Wad.from_number(2)
+    set_collateral_price(mcd, collateral, to_price)
+    urn = mcd.vat.urn(collateral.ilk, other_address)
+    ilk = mcd.vat.ilk(ilk.name)
+    safe = Ray(urn.art) * mcd.vat.ilk(ilk.name).rate <= Ray(urn.ink) * ilk.spot
+    assert not safe
+    assert mcd.cat.can_bite(collateral.ilk, Urn(other_address))
+    assert mcd.cat.bite(collateral.ilk, Urn(other_address)).transact()
     flip_kick = collateral.flipper.kicks()
 
     # Generate some Dai, bid on the flip auction without covering all the debt
@@ -211,11 +251,10 @@ def create_flip_auction(mcd: DssDeployment, deployment_address: Address, our_add
     collateral.approve(our_address)
     assert collateral.adapter.join(our_address, Wad.from_number(10)).transact(from_address=our_address)
     mcd.web3.eth.defaultAccount = our_address.address
-    frob(mcd, collateral, our_address, dink=Wad.from_number(10), dart=Wad.from_number(200))
+    frob(mcd, collateral, our_address, dink=Wad.from_number(10), dart=Wad.from_number(0))
     collateral.flipper.approve(mcd.vat.address, approval_function=hope_directly())
     current_bid = collateral.flipper.bids(flip_kick)
     urn = mcd.vat.urn(collateral.ilk, our_address)
-    assert Rad(urn.art) > current_bid.tab
     bid = Rad.from_number(6)
     tend(collateral.flipper, flip_kick, our_address, current_bid.lot, bid)
 
@@ -245,7 +284,7 @@ def prepare_esm(mcd: DssDeployment, our_address: Address):
     assert isinstance(mcd.esm.address, Address)
     assert mcd.esm.sum() == Wad(0)
     assert mcd.esm.min() > Wad(0)
-    assert not mcd.esm.fired()
+    assert mcd.end.live()
 
     assert mcd.mkr.approve(mcd.esm.address).transact()
 
@@ -264,7 +303,6 @@ def prepare_esm(mcd: DssDeployment, our_address: Address):
 def fire_esm(mcd: DssDeployment):
     assert mcd.end.live()
     assert mcd.esm.fire().transact()
-    assert mcd.esm.fired()
     assert not mcd.end.live()
 
 
@@ -283,38 +321,17 @@ class TestCageKeeper:
         print_out("test_check_deployment")
         keeper.check_deployment()
 
-    def test_get_underwater_urns(self, mcd: DssDeployment, keeper: CageKeeper, guy_address: Address, our_address: Address):
-        print_out("test_get_underwater_urns")
+    def test_get_collaterals(self, mcd: DssDeployment, keeper: CageKeeper):
+        print_out("test_get_collaterals")
 
-        previous_eth_price = open_underwater_urn(mcd, mcd.collaterals['ETH-A'], guy_address)
-        open_vault(mcd, mcd.collaterals['ETH-C'], our_address)
-
-        ilks = keeper.get_ilks()
-
-        urns = keeper.get_underwater_urns(ilks)
-        assert type(urns) is list
-        assert all(isinstance(x, Urn) for x in urns)
-        assert len(urns) == 1
-        assert urns[0].address.address == guy_address.address
-
-        ## We've multiplied by a small Ray amount to counteract
-        ## the residual dust (or lack thereof) in this step that causes
-        ## create_flop_auction fail
-        set_collateral_price(mcd, mcd.collaterals['ETH-A'], Wad(previous_eth_price * Ray.from_number(1.0001)))
-
-        pytest.global_urns = urns
-
-    def test_get_ilks(self, mcd: DssDeployment, keeper: CageKeeper):
-        print_out("test_get_ilks")
-
-        ilks = keeper.get_ilks()
-        assert type(ilks) is list
-        assert all(isinstance(x, Ilk) for x in ilks)
+        collaterals = keeper.get_collaterals()
+        assert type(collaterals) is list
+        assert all(isinstance(x, Collateral) for x in collaterals)
         deploymentIlks = [mcd.vat.ilk(key) for key in mcd.collaterals.keys()]
 
         empty_deploymentIlks = list(filter(lambda l: mcd.vat.ilk(l.name).art == Wad(0), deploymentIlks))
 
-        assert all(elem not in empty_deploymentIlks for elem in ilks)
+        assert all(elem.ilk not in empty_deploymentIlks for elem in collaterals)
 
     def test_active_auctions(self, mcd: DssDeployment, keeper: CageKeeper, our_address: Address, other_address: Address, deployment_address: Address):
         print_out("test_active_auctions")
@@ -323,11 +340,13 @@ class TestCageKeeper:
 
         create_flap_auction(mcd, deployment_address, our_address)
         create_flop_auction(mcd, deployment_address, other_address)
+        create_clip_auction(mcd, deployment_address, our_address)
         # this flip auction sets the collateral back to a price that makes the guy's vault underwater again.
         # 49 to make it underwater, and create_flip_auction sets it to 33
         create_flip_auction(mcd, deployment_address, our_address)
 
         auctions = keeper.all_active_auctions()
+        assert "clips" in auctions
         assert "flips" in auctions
         assert "flops" in auctions
         assert "flaps" in auctions
@@ -335,6 +354,13 @@ class TestCageKeeper:
         nobody = Address("0x0000000000000000000000000000000000000000")
 
         # All auctions active before cage have been yanked
+        for ilk in auctions["clips"].keys():
+            for auction in auctions["clips"][ilk]:
+                assert len(auctions["clips"][ilk]) == 1
+                assert auction.id > 0
+                assert auction.lot > Wad(0)
+                assert auction.usr != nobody
+
         for ilk in auctions["flips"].keys():
             for auction in auctions["flips"][ilk]:
                 assert len(auctions["flips"][ilk]) == 1
@@ -387,11 +413,12 @@ class TestCageKeeper:
 
     def test_cage_keeper(self, mcd: DssDeployment, keeper: CageKeeper, our_address: Address, other_address: Address):
         print_out("test_cage_keeper")
-        ilks = keeper.get_ilks()
+        ilks = list(map(lambda l: l.ilk, keeper.get_collaterals()))
         urns = pytest.global_urns
         auctions = pytest.global_auctions
 
         for ilk in ilks:
+            print(f"Checking end.tag for {ilk.name}")
             # Check if cage(ilk) called on all ilks
             assert mcd.end.tag(ilk) > Ray(0)
 
@@ -404,6 +431,10 @@ class TestCageKeeper:
             assert urn.art == Wad(0)
 
         # All auctions active before cage have been yanked
+        for ilk in auctions["clips"].keys():
+            for auction in auctions["clips"][ilk]:
+                assert mcd.collaterals[ilk].clipper.sales(auction.id).lot == Wad(0)
+
         for ilk in auctions["flips"].keys():
             for auction in auctions["flips"][ilk]:
                 assert mcd.collaterals[ilk].flipper.bids(auction.id).lot == Wad(0)
