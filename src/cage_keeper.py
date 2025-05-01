@@ -171,45 +171,70 @@ class CageKeeper:
 
     def check_cage(self):
         """ After live is 0 for 12 block confirmations, facilitate the processing period, then thaw the cage """
-        try:
-            blockNumber = self.web3.eth.blockNumber
-            self.logger.info(f'Checking Cage on block {blockNumber}')
+        max_retries = 3
+        retry_delay = 5  # seconds
+        
+        for attempt in range(1, max_retries + 1):
+            try:
+                blockNumber = self.web3.eth.blockNumber
+                self.logger.info(f'Checking Cage on block {blockNumber}')
 
-            live = self.dss.end.live()
+                live = self.dss.end.live()
 
-            # Ensure 12 blocks confirmations have passed before facilitating cage
-            if not live and (self.confirmations == 12):
-                self.logger.info('======== System has been caged ========')
+                # Ensure 12 blocks confirmations have passed before facilitating cage
+                if not live and (self.confirmations == 12):
+                    self.logger.info('======== System has been caged ========')
 
-                when = self.dss.end.when()
-                wait = self.dss.end.wait()
-                whenInUnix = when.replace(tzinfo=timezone.utc).timestamp()
-                now = self.web3.eth.getBlock(blockNumber).timestamp
-                thawedCage = whenInUnix + wait
+                    when = self.dss.end.when()
+                    wait = self.dss.end.wait()
+                    whenInUnix = when.replace(tzinfo=timezone.utc).timestamp()
+                    now = self.web3.eth.getBlock(blockNumber).timestamp
+                    thawedCage = whenInUnix + wait
 
-                if not self.cageFacilitated:
-                    self.cageFacilitated = True
-                    self.facilitate_processing_period()
+                    if not self.cageFacilitated:
+                        self.cageFacilitated = True
+                        self.facilitate_processing_period()
 
-                # wait until processing time concludes
-                elif (now >= thawedCage):
-                    self.thaw_cage()
+                    # wait until processing time concludes
+                    elif (now >= thawedCage):
+                        self.thaw_cage()
 
-                    if not (self.arguments.network == 'testnet'):
-                        self.lifecycle.terminate()
+                        if not (self.arguments.network == 'testnet'):
+                            self.lifecycle.terminate()
 
+                    else:
+                        whenThawedCage = datetime.utcfromtimestamp(thawedCage)
+                        self.logger.info('')
+                        self.logger.info(f'Cage has been processed and will be thawed on {whenThawedCage.strftime("%m/%d/%Y, %H:%M:%S")} UTC')
+                        self.logger.info('')
+
+                elif not live and self.confirmations < 13:
+                    self.confirmations = self.confirmations + 1
+                    self.logger.info(f'======== System has been caged ( {self.confirmations} confirmations) ========')
+                
+                # If we get here, the operation was successful
+                return
+                
+            except ValueError as e:
+                # Handle specific RPC errors like "No response or no available upstream"
+                error_str = str(e)
+                if "No response or no available upstream" in error_str:
+                    if attempt < max_retries:
+                        self.logger.warning(f"RPC connection issue: {error_str}. Retrying in {retry_delay} seconds (attempt {attempt}/{max_retries})...")
+                        time.sleep(retry_delay)
+                    else:
+                        self.logger.error(f"Failed to connect to RPC after {max_retries} attempts: {error_str}")
+                        self.errors += 1
                 else:
-                    whenThawedCage = datetime.utcfromtimestamp(thawedCage)
-                    self.logger.info('')
-                    self.logger.info(f'Cage has been processed and will be thawed on {whenThawedCage.strftime("%m/%d/%Y, %H:%M:%S")} UTC')
-                    self.logger.info('')
-
-            elif not live and self.confirmations < 13:
-                self.confirmations = self.confirmations + 1
-                self.logger.info(f'======== System has been caged ( {self.confirmations} confirmations) ========')
-        except Exception as e:
-            self.logger.warning(f"Error in check_cage: {str(e)}")
-            # Don't increment error count here as it's already handled in process_block
+                    # Other ValueError that's not an RPC connection issue
+                    self.logger.warning(f"ValueError in check_cage: {error_str}")
+                    self.errors += 1
+                    break
+                    
+            except Exception as e:
+                self.logger.warning(f"Error in check_cage: {str(e)}")
+                self.errors += 1
+                break
 
 
     def facilitate_processing_period(self):
