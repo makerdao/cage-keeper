@@ -36,7 +36,8 @@ from pymaker.token import ERC20Token
 from pymaker.deployment import DssDeployment
 from pymaker.dss import Ilk, Urn
 
-from auction_keeper.urn_history import UrnHistory
+from auction_keeper.urn_history import ChainUrnHistoryProvider
+from auction_keeper.urn_history_vulcanize import VulcanizeUrnHistoryProvider
 from auction_keeper.gas import DynamicGasPrice
 
 class CageKeeper:
@@ -341,12 +342,19 @@ class CageKeeper:
 
         for ilk in ilks:
 
-            urn_history = UrnHistory(self.web3,
-                                     self.dss,
-                                     ilk,
-                                     self.deployment_block,
-                                     self.arguments.vulcanize_endpoint,
-                                     self.arguments.vulcanize_key)
+            # Use VulcanizeUrnHistoryProvider if vulcanize endpoint is provided, otherwise use ChainUrnHistoryProvider
+            if self.arguments.vulcanize_endpoint and self.arguments.vulcanize_key:
+                urn_history = VulcanizeUrnHistoryProvider(
+                    self.dss,
+                    ilk,
+                    self.arguments.vulcanize_endpoint,
+                    self.arguments.vulcanize_key)
+            else:
+                urn_history = ChainUrnHistoryProvider(
+                    self.web3,
+                    self.dss,
+                    ilk,
+                    self.deployment_block)
 
             urns = urn_history.get_urns()
 
