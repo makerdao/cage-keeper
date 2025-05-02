@@ -86,13 +86,10 @@ class CageKeeper:
         parser.add_argument("--debug", dest='debug', action='store_true',
                             help="Enable debug output")
 
-        parser.add_argument("--ethgasstation-api-key", type=str, default=None, help="ethgasstation API key")
-
-        parser.add_argument("--gas-initial-multiplier", type=str, default=1.0, help="ethgasstation API key")
-        parser.add_argument("--gas-reactive-multiplier", type=str, default=2.25, help="gas strategy tuning")
-        parser.add_argument("--gas-maximum", type=str, default=5000, help="gas strategy tuning")
-
-
+        parser.add_argument("--etherscan-api-key", type=str, default=None, help="Etherscan API key for gas price oracle")
+        parser.add_argument("--gas-initial-multiplier", type=str, default=1.0, help="Gas price multiplier for first try")
+        parser.add_argument("--gas-reactive-multiplier", type=str, default=2.25, help="Gas price multiplier for subsequent tries")
+        parser.add_argument("--gas-maximum", type=str, default=5000, help="Maximum gas price in Gwei")
 
         parser.set_defaults(cageFacilitated=False)
         self.arguments = parser.parse_args(args)
@@ -119,7 +116,7 @@ class CageKeeper:
         self.confirmations = 0
 
         # Create gas strategy
-        if self.arguments.ethgasstation_api_key:
+        if self.arguments.etherscan_api_key:
             self.gas_price = DynamicGasPrice(self.arguments, self.web3)
         else:
             self.gas_price = DefaultGasPrice()

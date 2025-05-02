@@ -36,10 +36,10 @@ env:
     type: parameterStore
     name: eth-from-addr-mainnet
     parameter_name: /eks/maker-prod/cage-keeper/eth-from-addr-mainnet
-  ETH_GASSTATION_API_KEY:
+  ETHERSCAN_API_KEY:
     type: parameterStore
-    name: eth-gasstation-api-key
-    parameter_name: /eks/maker-prod/cage-keeper/eth-gasstation-api-key
+    name: etherscan-api-key
+    parameter_name: /eks/maker-prod/cage-keeper/etherscan-api-key
   SECRET_KEY:
     type: parameterStore
     name: secret-key-mainnet

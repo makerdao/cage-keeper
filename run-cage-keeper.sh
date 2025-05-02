@@ -26,7 +26,7 @@ then
     echo "No secret key to write to file."
   fi
   if [[ -n "${SECRET_PASS}" ]]; then
-    touch pass_file_location
+    touch ${pass_file_location}
     echo $SECRET_PASS >> ${pass_file_location}
   else
     echo "No secret pass to write to file."
@@ -42,4 +42,4 @@ exec $dir/bin/cage-keeper \
   --eth-key "${ETH_ACCOUNT_KEY}" \
   --vulcanize-endpoint "${VULCANIZE_URL}" \
   --vulcanize-key "${VULCANIZE_KEY}" \
-  --ethgasstation-api-key "${ETH_GASSTATION_API_KEY}"
+  --etherscan-api-key "${ETHERSCAN_API_KEY}"
