@@ -36,7 +36,8 @@ from pymaker.token import ERC20Token
 from pymaker.deployment import DssDeployment
 from pymaker.dss import Ilk, Urn
 
-from auction_keeper.urn_history import UrnHistory
+from auction_keeper.urn_history import ChainUrnHistoryProvider
+from auction_keeper.urn_history_vulcanize import VulcanizeUrnHistoryProvider
 from auction_keeper.gas import DynamicGasPrice
 
 class CageKeeper:
@@ -86,13 +87,10 @@ class CageKeeper:
         parser.add_argument("--debug", dest='debug', action='store_true',
                             help="Enable debug output")
 
-        parser.add_argument("--ethgasstation-api-key", type=str, default=None, help="ethgasstation API key")
-
-        parser.add_argument("--gas-initial-multiplier", type=str, default=1.0, help="ethgasstation API key")
-        parser.add_argument("--gas-reactive-multiplier", type=str, default=2.25, help="gas strategy tuning")
-        parser.add_argument("--gas-maximum", type=str, default=5000, help="gas strategy tuning")
-
-
+        parser.add_argument("--etherscan-api-key", type=str, default=None, help="Etherscan API key for gas price oracle")
+        parser.add_argument("--gas-initial-multiplier", type=str, default=1.0, help="Gas price multiplier for first try")
+        parser.add_argument("--gas-reactive-multiplier", type=str, default=2.25, help="Gas price multiplier for subsequent tries")
+        parser.add_argument("--gas-maximum", type=str, default=5000, help="Maximum gas price in Gwei")
 
         parser.set_defaults(cageFacilitated=False)
         self.arguments = parser.parse_args(args)
@@ -119,7 +117,7 @@ class CageKeeper:
         self.confirmations = 0
 
         # Create gas strategy
-        if self.arguments.ethgasstation_api_key:
+        if self.arguments.etherscan_api_key:
             self.gas_price = DynamicGasPrice(self.arguments, self.web3)
         else:
             self.gas_price = DefaultGasPrice()
@@ -161,46 +159,80 @@ class CageKeeper:
         if self.errors >= self.max_errors:
             self.lifecycle.terminate()
         else:
-            self.check_cage()
+            try:
+                self.check_cage()
+            except Exception as e:
+                self.logger.warning(f"Exception during check_cage: {str(e)}")
+                self.errors += 1
+                self.logger.warning(f"Error count: {self.errors}/{self.max_errors}")
 
 
     def check_cage(self):
         """ After live is 0 for 12 block confirmations, facilitate the processing period, then thaw the cage """
-        blockNumber = self.web3.eth.blockNumber
-        self.logger.info(f'Checking Cage on block {blockNumber}')
+        max_retries = 3
+        retry_delay = 5  # seconds
+        
+        for attempt in range(1, max_retries + 1):
+            try:
+                blockNumber = self.web3.eth.blockNumber
+                self.logger.info(f'Checking Cage on block {blockNumber}')
 
-        live = self.dss.end.live()
+                live = self.dss.end.live()
 
-        # Ensure 12 blocks confirmations have passed before facilitating cage
-        if not live and (self.confirmations == 12):
-            self.logger.info('======== System has been caged ========')
+                # Ensure 12 blocks confirmations have passed before facilitating cage
+                if not live and (self.confirmations == 12):
+                    self.logger.info('======== System has been caged ========')
 
-            when = self.dss.end.when()
-            wait = self.dss.end.wait()
-            whenInUnix = when.replace(tzinfo=timezone.utc).timestamp()
-            now = self.web3.eth.getBlock(blockNumber).timestamp
-            thawedCage = whenInUnix + wait
+                    when = self.dss.end.when()
+                    wait = self.dss.end.wait()
+                    whenInUnix = when.replace(tzinfo=timezone.utc).timestamp()
+                    now = self.web3.eth.getBlock(blockNumber).timestamp
+                    thawedCage = whenInUnix + wait
 
-            if not self.cageFacilitated:
-                self.cageFacilitated = True
-                self.facilitate_processing_period()
+                    if not self.cageFacilitated:
+                        self.cageFacilitated = True
+                        self.facilitate_processing_period()
 
-            # wait until processing time concludes
-            elif (now >= thawedCage):
-                self.thaw_cage()
+                    # wait until processing time concludes
+                    elif (now >= thawedCage):
+                        self.thaw_cage()
 
-                if not (self.arguments.network == 'testnet'):
-                    self.lifecycle.terminate()
+                        if not (self.arguments.network == 'testnet'):
+                            self.lifecycle.terminate()
 
-            else:
-                whenThawedCage = datetime.utcfromtimestamp(thawedCage)
-                self.logger.info('')
-                self.logger.info(f'Cage has been processed and will be thawed on {whenThawedCage.strftime("%m/%d/%Y, %H:%M:%S")} UTC')
-                self.logger.info('')
+                    else:
+                        whenThawedCage = datetime.utcfromtimestamp(thawedCage)
+                        self.logger.info('')
+                        self.logger.info(f'Cage has been processed and will be thawed on {whenThawedCage.strftime("%m/%d/%Y, %H:%M:%S")} UTC')
+                        self.logger.info('')
 
-        elif not live and self.confirmations < 13:
-            self.confirmations = self.confirmations + 1
-            self.logger.info(f'======== System has been caged ( {self.confirmations} confirmations) ========')
+                elif not live and self.confirmations < 13:
+                    self.confirmations = self.confirmations + 1
+                    self.logger.info(f'======== System has been caged ( {self.confirmations} confirmations) ========')
+                
+                # If we get here, the operation was successful
+                return
+                
+            except ValueError as e:
+                # Handle specific RPC errors like "No response or no available upstream"
+                error_str = str(e)
+                if "No response or no available upstream" in error_str:
+                    if attempt < max_retries:
+                        self.logger.warning(f"RPC connection issue: {error_str}. Retrying in {retry_delay} seconds (attempt {attempt}/{max_retries})...")
+                        time.sleep(retry_delay)
+                    else:
+                        self.logger.error(f"Failed to connect to RPC after {max_retries} attempts: {error_str}")
+                        self.errors += 1
+                else:
+                    # Other ValueError that's not an RPC connection issue
+                    self.logger.warning(f"ValueError in check_cage: {error_str}")
+                    self.errors += 1
+                    break
+                    
+            except Exception as e:
+                self.logger.warning(f"Error in check_cage: {str(e)}")
+                self.errors += 1
+                break
 
 
     def facilitate_processing_period(self):
@@ -209,31 +241,47 @@ class CageKeeper:
         self.logger.info('======== Facilitating Cage ========')
         self.logger.info('')
 
-        # check ilks
-        ilks = self.get_ilks()
+        try:
+            # check ilks
+            ilks = self.get_ilks()
 
-        # Get all auctions that can be yanked after cage
-        auctions = self.all_active_auctions()
+            # Get all auctions that can be yanked after cage
+            auctions = self.all_active_auctions()
 
-        # Yank all flap and flop auctions
-        self.yank_auctions(auctions["flaps"], auctions["flops"])
+            # Yank all flap and flop auctions
+            self.yank_auctions(auctions["flaps"], auctions["flops"])
 
-        # Cage all ilks
-        for ilk in ilks:
-            self.dss.end.cage(ilk).transact(gas_price=self.gas_price)
+            # Cage all ilks
+            for ilk in ilks:
+                try:
+                    self.dss.end.cage(ilk).transact(gas_price=self.gas_price)
+                except Exception as e:
+                    self.logger.warning(f"Error caging ilk {ilk.name}: {str(e)}")
+                    self.errors += 1
 
-        # Skip all flip auctions
-        for key in auctions["flips"].keys():
-            ilk = self.dss.vat.ilk(key)
-            for bid in auctions["flips"][key]:
-                self.dss.end.skip(ilk,bid.id).transact(gas_price=self.gas_price)
+            # Skip all flip auctions
+            for key in auctions["flips"].keys():
+                ilk = self.dss.vat.ilk(key)
+                for bid in auctions["flips"][key]:
+                    try:
+                        self.dss.end.skip(ilk,bid.id).transact(gas_price=self.gas_price)
+                    except Exception as e:
+                        self.logger.warning(f"Error skipping auction {bid.id} for ilk {key}: {str(e)}")
+                        self.errors += 1
 
-        #get all underwater urns
-        urns = self.get_underwater_urns(ilks)
+            #get all underwater urns
+            urns = self.get_underwater_urns(ilks)
 
-        #skim all underwater urns
-        for i in urns:
-            self.dss.end.skim(i.ilk, i.address).transact(gas_price=self.gas_price)
+            #skim all underwater urns
+            for i in urns:
+                try:
+                    self.dss.end.skim(i.ilk, i.address).transact(gas_price=self.gas_price)
+                except Exception as e:
+                    self.logger.warning(f"Error skimming urn {i.address} for ilk {i.ilk.name}: {str(e)}")
+                    self.errors += 1
+        except Exception as e:
+            self.logger.warning(f"Error in facilitate_processing_period: {str(e)}")
+            self.errors += 1
 
 
     def thaw_cage(self):
@@ -242,19 +290,35 @@ class CageKeeper:
         self.logger.info('======== Thawing Cage ========')
         self.logger.info('')
 
-        ilks = self.get_ilks()
+        try:
+            ilks = self.get_ilks()
 
-        # check if Dai is in Vow and annialate it with Heal()
-        dai = self.dss.vat.dai(self.dss.vow.address)
-        if dai > Rad(0):
-            self.dss.vow.heal(dai).transact(gas_price=self.gas_price)
+            # check if Dai is in Vow and annialate it with Heal()
+            dai = self.dss.vat.dai(self.dss.vow.address)
+            if dai > Rad(0):
+                try:
+                    self.dss.vow.heal(dai).transact(gas_price=self.gas_price)
+                except Exception as e:
+                    self.logger.warning(f"Error healing Dai in Vow: {str(e)}")
+                    self.errors += 1
 
-        # Call thaw and Fix outstanding supply of Dai
-        self.dss.end.thaw().transact(gas_price=self.gas_price)
+            # Call thaw and Fix outstanding supply of Dai
+            try:
+                self.dss.end.thaw().transact(gas_price=self.gas_price)
+            except Exception as e:
+                self.logger.warning(f"Error thawing the cage: {str(e)}")
+                self.errors += 1
 
-        # Set fix (collateral/Dai ratio) for all Ilks
-        for ilk in ilks:
-            self.dss.end.flow(ilk).transact(gas_price=self.gas_price)
+            # Set fix (collateral/Dai ratio) for all Ilks
+            for ilk in ilks:
+                try:
+                    self.dss.end.flow(ilk).transact(gas_price=self.gas_price)
+                except Exception as e:
+                    self.logger.warning(f"Error setting fix for ilk {ilk.name}: {str(e)}")
+                    self.errors += 1
+        except Exception as e:
+            self.logger.warning(f"Error in thaw_cage: {str(e)}")
+            self.errors += 1
 
 
     def get_ilks(self) -> List[Ilk]:
@@ -278,12 +342,19 @@ class CageKeeper:
 
         for ilk in ilks:
 
-            urn_history = UrnHistory(self.web3,
-                                     self.dss,
-                                     ilk,
-                                     self.deployment_block,
-                                     self.arguments.vulcanize_endpoint,
-                                     self.arguments.vulcanize_key)
+            # Use VulcanizeUrnHistoryProvider if vulcanize endpoint is provided, otherwise use ChainUrnHistoryProvider
+            if self.arguments.vulcanize_endpoint and self.arguments.vulcanize_key:
+                urn_history = VulcanizeUrnHistoryProvider(
+                    self.dss,
+                    ilk,
+                    self.arguments.vulcanize_endpoint,
+                    self.arguments.vulcanize_key)
+            else:
+                urn_history = ChainUrnHistoryProvider(
+                    self.web3,
+                    self.dss,
+                    ilk,
+                    self.deployment_block)
 
             urns = urn_history.get_urns()
 
@@ -349,10 +420,18 @@ class CageKeeper:
     def yank_auctions(self, flapBids: List, flopBids: List):
         """ Calls Flap.yank and Flop.yank on all auctions ids that meet the cage criteria """
         for bid in flapBids:
-            self.dss.flapper.yank(bid.id).transact(gas_price=self.gas_price)
+            try:
+                self.dss.flapper.yank(bid.id).transact(gas_price=self.gas_price)
+            except Exception as e:
+                self.logger.warning(f"Error yanking flap auction {bid.id}: {str(e)}")
+                self.errors += 1
 
         for bid in flopBids:
-            self.dss.flopper.yank(bid.id).transact(gas_price=self.gas_price)
+            try:
+                self.dss.flopper.yank(bid.id).transact(gas_price=self.gas_price)
+            except Exception as e:
+                self.logger.warning(f"Error yanking flop auction {bid.id}: {str(e)}")
+                self.errors += 1
 
 
 if __name__ == '__main__':
