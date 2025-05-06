@@ -88,9 +88,11 @@ class CageKeeper:
                             help="Enable debug output")
 
         parser.add_argument("--etherscan-api-key", type=str, default=None, help="Etherscan API key for gas price oracle")
-        parser.add_argument("--gas-initial-multiplier", type=str, default=1.0, help="Gas price multiplier for first try")
-        parser.add_argument("--gas-reactive-multiplier", type=str, default=2.25, help="Gas price multiplier for subsequent tries")
-        parser.add_argument("--gas-maximum", type=str, default=5000, help="Maximum gas price in Gwei")
+        parser.add_argument("--oracle-gas-price", dest='oracle_gas_price', action='store_true', default=True,
+                            help="Use gas price oracle for gas price discovery (default: True)")
+        parser.add_argument("--gas-initial-multiplier", type=float, default=1.0, help="Gas price multiplier for first try")
+        parser.add_argument("--gas-reactive-multiplier", type=float, default=2.25, help="Gas price multiplier for subsequent tries")
+        parser.add_argument("--gas-maximum", type=float, default=5000, help="Maximum gas price in Gwei")
 
         parser.set_defaults(cageFacilitated=False)
         self.arguments = parser.parse_args(args)
@@ -120,6 +122,8 @@ class CageKeeper:
         if self.arguments.etherscan_api_key:
             self.gas_price = DynamicGasPrice(self.arguments, self.web3)
         else:
+            # If no Etherscan API key is provided, set oracle_gas_price to False to avoid the error
+            self.arguments.oracle_gas_price = False
             self.gas_price = DefaultGasPrice()
 
 
