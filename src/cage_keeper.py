@@ -119,7 +119,18 @@ class CageKeeper:
         self.confirmations = 0
 
         # Create gas strategy
+        # Set default values for missing arguments to avoid AttributeError
+        if not hasattr(self.arguments, 'ethgasstation_api_key'):
+            self.arguments.ethgasstation_api_key = None
+        if not hasattr(self.arguments, 'poanetwork_url'):
+            self.arguments.poanetwork_url = None
+        if not hasattr(self.arguments, 'blocknative_api_key'):
+            self.arguments.blocknative_api_key = None
+        if not hasattr(self.arguments, 'fixed_gas_price'):
+            self.arguments.fixed_gas_price = None
+            
         if self.arguments.etherscan_api_key:
+            # Use Etherscan for gas price
             self.gas_price = DynamicGasPrice(self.arguments, self.web3)
         else:
             # If no Etherscan API key is provided, set oracle_gas_price to False to avoid the error
