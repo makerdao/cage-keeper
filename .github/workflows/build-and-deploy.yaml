@@ -1,7 +1,7 @@
 on:
   push:
     branches:
-      - TECH-4909-exception-handling-improvement
+      - fix-build-issue
 
 name: Build Docker image and deploy it to Kubernetes cluster
 
