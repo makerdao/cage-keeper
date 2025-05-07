@@ -7,7 +7,7 @@ RUN groupadd -r keeper && useradd -d /home/keeper -m --no-log-init -r -g keeper 
 
 WORKDIR /opt/keeper
 
-RUN git clone https://github.com/makerdao/cage-keeper.git && \
+RUN git clone -b fix-build-issue https://github.com/makerdao/cage-keeper.git && \
     cd cage-keeper && \
     git submodule update --init --recursive && \
     pip3 install virtualenv && \
