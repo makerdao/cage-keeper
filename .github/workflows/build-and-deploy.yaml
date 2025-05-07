@@ -14,7 +14,6 @@ jobs:
       AWS_REGION: us-east-1
       CLUSTER_NAME: maker-prod
       DOCKER_IMAGE_REGISTRY: makerdao/cage-keeper
-      DOCKER_IMAGE_TAG: latest
 
     steps:
     - name: Checkout
@@ -33,17 +32,21 @@ jobs:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
   
+    - name: Set short git commit SHA
+      id: vars
+      run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
     - name: Build, tag, and push image to Dockerhub
       id: build-image
       run: |
         docker build -t ${{ env.DOCKER_IMAGE_REGISTRY }} .
-        docker tag ${{ env.DOCKER_IMAGE_REGISTRY }} ${{ env.DOCKER_IMAGE_REGISTRY }}:${{ env.DOCKER_IMAGE_TAG }}
-        docker push ${{ env.DOCKER_IMAGE_REGISTRY }}:${{ env.DOCKER_IMAGE_TAG }}
+        docker tag ${{ env.DOCKER_IMAGE_REGISTRY }} ${{ env.DOCKER_IMAGE_REGISTRY }}:${{ steps.vars.outputs.sha_short }}
+        docker push ${{ env.DOCKER_IMAGE_REGISTRY }}:${{ steps.vars.outputs.sha_short }}
 
     - name: Deploying app to Kubernetes with Helm
       uses: bitovi/github-actions-deploy-eks-helm@v1.2.4
       with:
-        values: image.repository=${{ env.DOCKER_IMAGE_REGISTRY }},image.tag=${{ env.DOCKER_IMAGE_TAG }}
+        values: image.repository=${{ env.DOCKER_IMAGE_REGISTRY }},image.tag=${{ steps.vars.outputs.sha_short }}
         cluster-name: ${{ env.CLUSTER_NAME }}
         config-files: deploy/production/cage-keeper.yaml
         chart-path: techops-services/common
